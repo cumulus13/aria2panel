@@ -6,6 +6,10 @@ configuration stored in **PostgreSQL**.
 
 ![Django](https://img.shields.io/badge/django-%23092E20.svg?style=flat&logo=django&logoColor=white) ![CI Status](https://github.com/cumulus13/aria2panel/actions/workflows/ci.yml/badge.svg)
 
+<p align="center">
+  <img src="https://files.catbox.moe/wtuttw.png" width="20%" alt="Powered by Django">
+</p>
+
 ## Architecture
 
 ```
@@ -25,10 +29,6 @@ graph TD
 ```    
 
 [![Architecture](https://files.catbox.moe/5fdngl.jpg)](https://files.catbox.moe/5fdngl.jpg)
-
-<p align="center">
-  <img src="https://files.catbox.moe/wtuttw.png" width="20%" alt="Powered by Django">
-</p>
 
 <p align="center">
   <a href="https://files.catbox.moe/e4da8v.png" target="_blank">
@@ -56,7 +56,7 @@ graph TD
   it keeps working when no browser is open and survives restarts (the old browser-side scheduler did not).
   A row lock (`SELECT … FOR UPDATE SKIP LOCKED`) makes several scheduler processes safe.
 * No Celery, Redis or RabbitMQ: there are no background jobs besides that loop, aria2 does the transfers.
-  Add Redis + Django Channels only if you later want server push for many simultaneous viewers.
+  Redis + Django channels will be added for server push for multiple simultaneous viewers in the next version.
 
 ## Quick start (Docker)
 
@@ -72,7 +72,9 @@ Open `http://localhost:8000`, sign in with `DJANGO_SUPERUSER_*`. The first aria2
 Without Docker:
 
 ```bash
+cp .env.example .env          # edit: DJANGO_SECRET_KEY, DATABASE_URL, admin + aria2 settings
 python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
+python manage.py collectstatic
 export DATABASE_URL=postgres://user:pass@host:5432/db DJANGO_SECRET_KEY=... DJANGO_DEBUG=1
 python manage.py migrate && python manage.py bootstrap
 python manage.py runserver        # terminal 1
