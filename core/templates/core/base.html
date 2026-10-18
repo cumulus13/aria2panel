@@ -1,0 +1,67 @@
+{% load static %}<!doctype html>
+<html lang="en" data-default-theme="{{ default_theme }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}Dashboard{% endblock %} · {{ site_name }}</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%230d6efd'/%3E%3Cpath fill='white' d='M8 3v6.3L5.9 7.2 5 8.1l3 3 3-3-.9-.9L8.9 9.3V3zM4 12h8v1H4z'/%3E%3C/svg%3E">
+  <script src="{% static 'core/js/theme.js' %}?v={{ asset_version }}"></script>
+  <link rel="stylesheet" href="{% static 'core/vendor/bootstrap/bootstrap.min.css' %}?v={{ asset_version }}">
+  <link rel="stylesheet" href="{% static 'core/vendor/bootstrap-icons/bootstrap-icons.min.css' %}?v={{ asset_version }}">
+  <link rel="stylesheet" href="{% static 'core/css/app.css' %}?v={{ asset_version }}">
+  {% block head %}{% endblock %}
+</head>
+<body data-login-url="{% url 'login' %}">
+{% block body %}
+<nav class="navbar navbar-expand-lg navbar-panel sticky-top">
+  <div class="container-xxl">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'dashboard' %}">
+      <span class="brand-mark"><i class="bi bi-cloud-arrow-down-fill"></i></span>
+      <span class="fw-semibold">{{ site_name }}</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-label="Toggle navigation"><i class="bi bi-list"></i></button>
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item"><a class="nav-link {% if nav == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+        {% if user.is_staff %}
+        <li class="nav-item"><a class="nav-link {% if nav == 'scheduler' %}active{% endif %}" href="{% url 'scheduler' %}"><i class="bi bi-calendar2-check"></i> Scheduler</a></li>
+        <li class="nav-item"><a class="nav-link {% if nav == 'servers' %}active{% endif %}" href="{% url 'server_list' %}"><i class="bi bi-hdd-network"></i> Servers</a></li>
+        <li class="nav-item"><a class="nav-link {% if nav == 'settings' %}active{% endif %}" href="{% url 'settings' %}"><i class="bi bi-sliders"></i> Settings</a></li>
+        {% endif %}
+      </ul>
+      <div class="d-flex align-items-center gap-2">
+        {% if servers|length > 1 %}
+        <div class="dropdown">
+          <button class="btn btn-sm btn-nav dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-hdd-rack"></i> {{ server.name }}</button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            {% for s in servers %}<li><a class="dropdown-item {% if s.pk == server.pk %}active{% endif %}" href="?server={{ s.pk }}">{{ s.name }}</a></li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+        <button class="btn btn-sm btn-nav" id="theme-toggle" type="button" title="Toggle theme"><i class="bi bi-circle-half"></i></button>
+        <div class="dropdown">
+          <button class="btn btn-sm btn-nav dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-person-circle"></i> {{ user.get_username }}</button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            {% if user.is_superuser %}<li><a class="dropdown-item" href="{% url 'admin:index' %}"><i class="bi bi-shield-lock"></i> Admin</a></li><li><hr class="dropdown-divider"></li>{% endif %}
+            <li><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="dropdown-item" type="submit"><i class="bi bi-box-arrow-right"></i> Sign out</button></form></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</nav>
+<main class="container-xxl py-4">
+  {% for message in messages %}
+  <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show" role="alert">{{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+  {% endfor %}
+  {% block content %}{% endblock %}
+</main>
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toasts"></div>
+{% endblock %}
+<script src="{% static 'core/vendor/bootstrap/bootstrap.bundle.min.js' %}?v={{ asset_version }}"></script>
+<script src="{% static 'core/js/api.js' %}?v={{ asset_version }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

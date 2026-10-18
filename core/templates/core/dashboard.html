@@ -1,0 +1,145 @@
+{% extends "core/base.html" %}
+{% load static %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div id="dashboard" data-server="{{ server.pk }}" data-poll="{{ poll }}" data-staff="{{ user.is_staff|yesno:'1,0' }}">
+
+  <div class="row g-3 mb-3">
+    <div class="col-12 col-lg-5">
+      <div class="card stat-card h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between">
+            <div><div class="stat-label"><i class="bi bi-arrow-down-circle-fill text-primary"></i> Download</div><div class="stat-value" id="st-down">0 B/s</div></div>
+            <div class="text-end"><div class="stat-label"><i class="bi bi-arrow-up-circle-fill text-success"></i> Upload</div><div class="stat-value" id="st-up">0 B/s</div></div>
+          </div>
+          <canvas id="spark" class="spark mt-2" height="70"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-2">
+      <div class="card stat-card h-100"><div class="card-body">
+        <div class="stat-label"><i class="bi bi-lightning-charge-fill text-warning"></i> Active</div><div class="stat-value" id="st-active">0</div>
+        <div class="stat-sub" id="st-waiting">0 waiting</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+      <div class="card stat-card h-100"><div class="card-body">
+        <div class="stat-label"><i class="bi bi-list-ol text-info"></i> Queued</div><div class="stat-value" id="st-queued">0</div>
+        <div class="stat-sub" id="st-stopped">0 finished</div>
+      </div></div>
+    </div>
+    <div class="col-12 col-lg-3">
+      <div class="card stat-card h-100"><div class="card-body">
+        <div class="d-flex justify-content-between"><div class="stat-label"><i class="bi bi-calendar2-check text-primary"></i> Scheduler</div>
+          {% if user.is_staff %}<a class="small" href="{% url 'scheduler' %}?server={{ server.pk }}">Manage</a>{% endif %}</div>
+        <div class="stat-value" id="st-slots">–</div>
+        <div class="progress mt-2" style="height:6px"><div class="progress-bar" id="st-slots-bar" style="width:0%"></div></div>
+        <div class="stat-sub mt-1" id="st-sched-state"></div>
+      </div></div>
+    </div>
+  </div>
+
+  <div id="conn-alert" class="alert alert-danger d-none"><i class="bi bi-wifi-off"></i> <span></span></div>
+
+  <div class="card">
+    <div class="card-header toolbar">
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <button class="btn btn-primary" id="btn-add"><i class="bi bi-plus-lg"></i> Add</button>
+        <div class="btn-group">
+          <button class="btn btn-outline-secondary" id="btn-pause-all" title="Pause all"><i class="bi bi-pause-fill"></i></button>
+          <button class="btn btn-outline-secondary" id="btn-resume-all" title="Resume all"><i class="bi bi-play-fill"></i></button>
+          <button class="btn btn-outline-secondary" id="btn-purge" title="Clear finished from the list"><i class="bi bi-trash3"></i></button>
+        </div>
+        {% if user.is_staff %}<button class="btn btn-outline-secondary" id="btn-limits" title="Global limits"><i class="bi bi-speedometer"></i></button>{% endif %}
+        <div class="bulk d-none" id="bulk">
+          <span class="small text-body-secondary me-1"><span id="bulk-count">0</span> selected</span>
+          <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary" data-bulk="pause"><i class="bi bi-pause-fill"></i></button>
+            <button class="btn btn-outline-secondary" data-bulk="unpause"><i class="bi bi-play-fill"></i></button>
+            <button class="btn btn-outline-danger" data-bulk="remove"><i class="bi bi-x-lg"></i></button>
+          </div>
+        </div>
+        <div class="ms-auto search-box"><i class="bi bi-search"></i><input type="search" class="form-control" id="search" placeholder="Search…  ( / )" autocomplete="off"></div>
+      </div>
+      <ul class="nav nav-pills filter-pills mt-2" id="filters">
+        <li class="nav-item"><a class="nav-link active" href="#" data-filter="all">All <span class="badge" data-count="all">0</span></a></li>
+        <li class="nav-item"><a class="nav-link" href="#" data-filter="active">Active <span class="badge" data-count="active">0</span></a></li>
+        <li class="nav-item"><a class="nav-link" href="#" data-filter="waiting">Waiting <span class="badge" data-count="waiting">0</span></a></li>
+        <li class="nav-item"><a class="nav-link" href="#" data-filter="queued">Queued <span class="badge" data-count="queued">0</span></a></li>
+        <li class="nav-item"><a class="nav-link" href="#" data-filter="paused">Paused <span class="badge" data-count="paused">0</span></a></li>
+        <li class="nav-item"><a class="nav-link" href="#" data-filter="complete">Completed <span class="badge" data-count="complete">0</span></a></li>
+        <li class="nav-item"><a class="nav-link" href="#" data-filter="error">Errors <span class="badge" data-count="error">0</span></a></li>
+      </ul>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0 dl-table">
+        <thead><tr>
+          <th style="width:36px"><input class="form-check-input" type="checkbox" id="check-all"></th>
+          <th>Name</th><th class="text-end d-none d-md-table-cell">Size</th><th style="min-width:160px">Progress</th>
+          <th class="text-end d-none d-lg-table-cell">Speed</th><th class="text-end d-none d-lg-table-cell">ETA</th>
+          <th>Status</th><th class="text-end">Actions</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="empty-state d-none" id="empty"><i class="bi bi-inbox display-4"></i><div class="mt-2">Nothing here yet</div><div class="small text-body-secondary">Press <kbd>a</kbd> or <b>Add</b> to start a download</div></div>
+  </div>
+
+  <!-- add -->
+  <div class="modal fade" id="addModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-scrollable"><form class="modal-content" id="add-form">
+    <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle"></i> Add downloads</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item"><button class="nav-link active" type="button" data-bs-toggle="tab" data-bs-target="#tab-links"><i class="bi bi-link-45deg"></i> Links</button></li>
+        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="tab" data-bs-target="#tab-files"><i class="bi bi-file-earmark-arrow-up"></i> Torrent / Metalink</button></li>
+        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="tab" data-bs-target="#tab-opts"><i class="bi bi-gear"></i> Options</button></li>
+      </ul>
+      <div class="tab-content">
+        <div class="tab-pane fade show active" id="tab-links">
+          <label class="form-label" for="add-uris">One download per line. Add mirrors of the same file on one line, separated by a space.</label>
+          <textarea class="form-control font-monospace" id="add-uris" rows="7" placeholder="https://example.com/file.iso&#10;magnet:?xt=urn:btih:…"></textarea>
+        </div>
+        <div class="tab-pane fade" id="tab-files">
+          <label class="form-label" for="add-files">.torrent, .meta4 or .metalink files (max 10 MB each)</label>
+          <input class="form-control" type="file" id="add-files" multiple accept=".torrent,.meta4,.metalink">
+        </div>
+        <div class="tab-pane fade" id="tab-opts">
+          <div class="row g-3">
+            <div class="col-md-8"><label class="form-label">Directory</label><input class="form-control" data-opt="dir" placeholder="server default"></div>
+            <div class="col-md-4"><label class="form-label">File name <span class="text-body-secondary">(single link)</span></label><input class="form-control" data-opt="out"></div>
+            <div class="col-md-4"><label class="form-label">Connections per server</label><input class="form-control" type="number" min="1" max="16" data-opt="max-connection-per-server"></div>
+            <div class="col-md-4"><label class="form-label">Split</label><input class="form-control" type="number" min="1" data-opt="split"></div>
+            <div class="col-md-4"><label class="form-label">Speed limit</label><input class="form-control" data-opt="max-download-limit" placeholder="e.g. 500K, 2M"></div>
+            <div class="col-md-6"><label class="form-label">Referer</label><input class="form-control" data-opt="referer"></div>
+            <div class="col-md-6"><label class="form-label">User agent</label><input class="form-control" data-opt="user-agent"></div>
+            <div class="col-md-6"><label class="form-label">Start at <span class="text-body-secondary">(optional)</span></label><input class="form-control" type="datetime-local" id="add-when"><div class="form-text">Held in the queue until this time and a free slot.</div></div>
+            <div class="col-md-6 d-flex flex-column justify-content-center gap-2">
+              <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="add-paused"><label class="form-check-label" for="add-paused">Start paused</label></div>
+              <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="add-verify"><label class="form-check-label" for="add-verify">Verify integrity (checksum)</label></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" type="submit" id="add-submit"><i class="bi bi-download"></i> Add</button></div>
+  </form></div></div>
+
+  <!-- details -->
+  <div class="modal fade" id="detailModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title text-truncate" id="detail-title">Details</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body" id="detail-body"></div>
+  </div></div></div>
+
+  <!-- limits -->
+  <div class="modal fade" id="limitsModal" tabindex="-1"><div class="modal-dialog"><form class="modal-content" id="limits-form">
+    <div class="modal-header"><h5 class="modal-title"><i class="bi bi-speedometer"></i> Global limits</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <div class="mb-3"><label class="form-label">Overall download limit</label><input class="form-control" name="max-overall-download-limit" placeholder="0 = unlimited, e.g. 2M"></div>
+      <div class="mb-3"><label class="form-label">Overall upload limit</label><input class="form-control" name="max-overall-upload-limit" placeholder="0 = unlimited"></div>
+      <div class="mb-0"><label class="form-label">aria2 max concurrent downloads</label><input class="form-control" type="number" min="1" name="max-concurrent-downloads"><div class="form-text">aria2's own limit. Managed by the scheduler while it is enabled (see the Scheduler page).</div></div>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" type="submit">Apply</button></div>
+  </form></div></div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'core/js/dashboard.js' %}?v={{ asset_version }}"></script>{% endblock %}

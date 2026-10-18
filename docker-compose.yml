@@ -1,0 +1,33 @@
+services:
+  web:
+    build: .
+    image: aria2panel:latest
+    command: ["web"]
+    env_file: .env
+    ports:
+      - "${PANEL_PORT:-8000}:8000"
+    restart: unless-stopped
+
+  # dispatches queued downloads and applies speed rules, also when no browser is open
+  scheduler:
+    image: aria2panel:latest
+    command: ["scheduler"]
+    env_file: .env
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # optional: `docker compose --profile local-aria2 up -d`
+  aria2:
+    profiles: ["local-aria2"]
+    build:
+      context: .
+      dockerfile: deploy/aria2.Dockerfile
+    environment:
+      RPC_SECRET: "${ARIA2_RPC_SECRET:?set ARIA2_RPC_SECRET in .env}"
+    volumes:
+      - "${DOWNLOADS_DIR:-./downloads}:/downloads"
+    ports:
+      - "6800:6800"
+    restart: unless-stopped

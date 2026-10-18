@@ -1,0 +1,31 @@
+{% extends "core/base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block body %}
+<div class="login-wrap">
+  <div class="card login-card shadow-lg">
+    <div class="card-body p-4 p-md-5">
+      <div class="text-center mb-4">
+        <span class="brand-mark brand-mark-lg"><i class="bi bi-cloud-arrow-down-fill"></i></span>
+        <h1 class="h4 mt-3 mb-1">{{ site_name }}</h1>
+        <p class="text-body-secondary mb-0">Sign in to manage your downloads</p>
+      </div>
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="alert alert-danger py-2">{{ form.non_field_errors.0 }}</div>{% endif %}
+        <div class="form-floating mb-3">
+          <input type="text" name="username" class="form-control" id="id_username" placeholder="Username" autofocus autocomplete="username" required>
+          <label for="id_username">Username</label>
+        </div>
+        <div class="form-floating mb-3">
+          <input type="password" name="password" class="form-control" id="id_password" placeholder="Password" autocomplete="current-password" required>
+          <label for="id_password">Password</label>
+        </div>
+        <input type="hidden" name="next" value="{{ next }}">
+        <button class="btn btn-primary w-100 py-2" type="submit"><i class="bi bi-box-arrow-in-right"></i> Sign in</button>
+      </form>
+      <div class="text-center mt-3"><button class="btn btn-sm btn-link text-body-secondary" id="theme-toggle" type="button"><i class="bi bi-circle-half"></i> Theme</button></div>
+    </div>
+  </div>
+</div>
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toasts"></div>
+{% endblock %}

@@ -1,0 +1,9 @@
+.env
+.git
+.github
+.venv
+venv
+staticfiles
+downloads
+**/__pycache__
+**/*.pyc

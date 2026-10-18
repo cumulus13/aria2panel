@@ -1,0 +1,11 @@
+.env
+*.pyc
+__pycache__/
+/staticfiles/
+/downloads/
+.venv/
+venv/
+
+# Ignore Sublime Text project files
+*.sublime-project
+*.sublime-workspace

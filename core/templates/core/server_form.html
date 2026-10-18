@@ -1,0 +1,20 @@
+{% extends "core/base.html" %}
+{% load static %}
+{% block title %}{% if instance %}Edit server{% else %}New server{% endif %}{% endblock %}
+{% block content %}
+<div class="row justify-content-center"><div class="col-lg-8 col-xl-6">
+<h1 class="h4 mb-3"><i class="bi bi-hdd-network"></i> {% if instance %}Edit “{{ instance.name }}”{% else %}New aria2 server{% endif %}</h1>
+<form method="post" class="card card-body" id="server-form" data-server-id="{{ instance.pk|default:'' }}">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+  {% for field in form %}{% include "core/_field.html" %}{% endfor %}
+  <div class="d-flex gap-2 align-items-center">
+    <button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> Save</button>
+    <button class="btn btn-outline-secondary" type="button" id="test-conn"><i class="bi bi-plug"></i> Test connection</button>
+    <a class="btn btn-link" href="{% url 'server_list' %}">Cancel</a>
+    <span id="test-result" class="small ms-2"></span>
+  </div>
+</form>
+</div></div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'core/js/servers.js' %}?v={{ asset_version }}"></script>{% endblock %}

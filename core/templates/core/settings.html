@@ -1,0 +1,13 @@
+{% extends "core/base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="row justify-content-center"><div class="col-lg-8 col-xl-6">
+<h1 class="h4 mb-1"><i class="bi bi-sliders"></i> Settings</h1>
+<p class="text-body-secondary">Stored in the database. Changes reach all workers within a few seconds.</p>
+<form method="post" class="card card-body">
+  {% csrf_token %}
+  {% for field in form %}{% include "core/_field.html" %}{% endfor %}
+  <div><button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> Save settings</button></div>
+</form>
+</div></div>
+{% endblock %}

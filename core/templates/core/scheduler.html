@@ -1,0 +1,92 @@
+{% extends "core/base.html" %}
+{% load static %}
+{% block title %}Scheduler{% endblock %}
+{% block content %}
+<div id="sched" data-server="{{ server.pk }}">
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <h1 class="h4 mb-0"><i class="bi bi-calendar2-check"></i> Scheduler <span class="text-body-secondary fs-6">· {{ server.name }}</span></h1>
+    <div class="small text-body-secondary"><i class="bi bi-clock"></i> <span id="s-now">–</span> ({{ time_zone }})</div>
+  </div>
+  <div id="conn-alert" class="alert alert-danger d-none"><i class="bi bi-wifi-off"></i> <span></span></div>
+
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <div class="card h-100">
+        <div class="card-header fw-semibold"><i class="bi bi-toggles"></i> Concurrency</div>
+        <form class="card-body" id="cfg-form">
+          <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="cfg-enabled"><label class="form-check-label" for="cfg-enabled">Limit simultaneous downloads</label>
+            <div class="form-text">When off, everything is sent to aria2 immediately.</div></div>
+          <div class="mb-3"><label class="form-label" for="cfg-max">Max simultaneous downloads</label><input class="form-control" type="number" min="1" max="500" id="cfg-max">
+            <div class="form-text">Downloads above this number wait in the queue and start automatically, in order, when one finishes, is paused or fails. Seeding torrents and paused downloads do not count.</div></div>
+          <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="cfg-enforce"><label class="form-check-label" for="cfg-enforce">Also enforce inside aria2</label>
+            <div class="form-text">Keeps aria2's own concurrency limit in step, so resuming a paused download above the limit waits for a free slot.</div></div>
+          <div class="mb-3"><div class="d-flex justify-content-between small"><span>In use</span><span id="s-running">–</span></div>
+            <div class="progress" style="height:8px"><div class="progress-bar" id="s-bar" style="width:0%"></div></div></div>
+          <hr>
+          <div class="row g-2 mb-3">
+            <div class="col"><label class="form-label small">Default download limit</label><input class="form-control form-control-sm" id="cfg-dl" placeholder="0"></div>
+            <div class="col"><label class="form-label small">Default upload limit</label><input class="form-control form-control-sm" id="cfg-ul" placeholder="0"></div>
+          </div>
+          <div class="form-text mb-3">Applied outside every speed rule window. Only managed when at least one rule exists or a default is set.</div>
+          <button class="btn btn-primary w-100" type="submit"><i class="bi bi-check-lg"></i> Save</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="col-lg-8">
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center"><span class="fw-semibold"><i class="bi bi-list-ol"></i> Queue <span class="badge text-bg-secondary" id="q-count">0</span></span>
+          <button class="btn btn-sm btn-outline-danger" id="q-clear"><i class="bi bi-trash"></i> Clear</button></div>
+        <div class="table-responsive"><table class="table table-hover align-middle mb-0">
+          <thead><tr><th style="width:44px">#</th><th>Name</th><th>Start at</th><th class="text-end">Actions</th></tr></thead>
+          <tbody id="q-rows"></tbody></table></div>
+        <div class="empty-state small d-none" id="q-empty"><i class="bi bi-inbox fs-2"></i><div>The queue is empty</div></div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center"><span class="fw-semibold"><i class="bi bi-speedometer"></i> Speed rules</span>
+          <button class="btn btn-sm btn-primary" id="r-add"><i class="bi bi-plus-lg"></i> Add rule</button></div>
+        <div class="table-responsive"><table class="table table-hover align-middle mb-0">
+          <thead><tr><th>Name</th><th>Days</th><th>Time</th><th>Down</th><th>Up</th><th></th></tr></thead>
+          <tbody id="r-rows"></tbody></table></div>
+        <div class="empty-state small d-none" id="r-empty"><i class="bi bi-clock-history fs-2"></i><div>No rules. Add one to limit bandwidth at certain times.</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header fw-semibold"><i class="bi bi-clock-history"></i> Recent activity</div>
+        <ul class="list-group list-group-flush" id="h-rows"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="ruleModal" tabindex="-1"><div class="modal-dialog"><form class="modal-content" id="rule-form">
+    <div class="modal-header"><h5 class="modal-title" id="rule-title">Speed rule</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <div class="mb-3"><label class="form-label">Name</label><input class="form-control" id="rule-name" required maxlength="100" placeholder="Office hours"></div>
+      <div class="mb-3"><label class="form-label d-block">Days</label>
+        <div class="btn-group flex-wrap" role="group">
+          {% for i, d in weekdays %}<input type="checkbox" class="btn-check rule-day" id="day{{ i }}" value="{{ i }}" checked><label class="btn btn-outline-primary btn-sm" for="day{{ i }}">{{ d }}</label>{% endfor %}
+        </div></div>
+      <div class="row g-3 mb-3">
+        <div class="col"><label class="form-label">From</label><input type="time" class="form-control" id="rule-start" required value="09:00"></div>
+        <div class="col"><label class="form-label">To</label><input type="time" class="form-control" id="rule-end" required value="17:00"></div>
+      </div>
+      <div class="form-text mb-3">A window that ends before it starts spans midnight (22:00 → 06:00). Same time twice means the whole day.</div>
+      <div class="row g-3 mb-3">
+        <div class="col"><label class="form-label">Download limit</label><input class="form-control" id="rule-dl" value="0" placeholder="500K, 2M, 0"></div>
+        <div class="col"><label class="form-label">Upload limit</label><input class="form-control" id="rule-ul" value="0"></div>
+      </div>
+      <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="rule-enabled" checked><label class="form-check-label" for="rule-enabled">Enabled</label></div>
+    </div>
+    <div class="modal-footer justify-content-between"><button type="button" class="btn btn-outline-danger d-none" id="rule-delete"><i class="bi bi-trash"></i> Delete</button>
+      <div><button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" type="submit">Save</button></div></div>
+  </form></div></div>
+
+  <div class="modal fade" id="whenModal" tabindex="-1"><div class="modal-dialog modal-sm"><form class="modal-content" id="when-form">
+    <div class="modal-header"><h5 class="modal-title">Start at</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body"><input type="datetime-local" class="form-control" id="when-input"><div class="form-text">Leave empty to start as soon as a slot is free.</div></div>
+    <div class="modal-footer"><button class="btn btn-primary" type="submit">Set</button></div>
+  </form></div></div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'core/js/scheduler.js' %}?v={{ asset_version }}"></script>{% endblock %}
