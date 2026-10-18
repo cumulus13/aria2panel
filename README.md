@@ -15,7 +15,7 @@ browser ──HTTP/JSON──► web  (Django + gunicorn) ──JSON-RPC──�
                     PostgreSQL ◄──── scheduler (manage.py run_scheduler)
 ```
 
-```mermaid:
+```mermaid
 graph TD
     Browser -->|HTTP/JSON| Web["Web<br>(Django + Gunicorn)"]
     Web -->|JSON-RPC| Aria2[aria2]
