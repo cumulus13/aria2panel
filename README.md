@@ -4,6 +4,8 @@ Django control panel for one or more [aria2](https://aria2.github.io/) servers: 
 queue with a **max simultaneous downloads** scheduler, time based **speed rules**, dark mode, and all
 configuration stored in **PostgreSQL**.
 
+![Django](https://img.shields.io/badge/django-%23092E20.svg?style=flat&logo=django&logoColor=white) ![CI Status](https://github.com/cumulus13/aria2panel/actions/workflows/ci.yml/badge.svg)
+
 ## Architecture
 
 ```
