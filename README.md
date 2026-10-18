@@ -45,12 +45,6 @@ graph TD
   </a>
 </p>
 
-<dialog id="zoomModal" onclick="this.close()" style="border: none; background: transparent; padding: 0; max-width: 90vw; max-height: 90vh;">
-  <div align="center" style="position: relative;">
-    <!-- Full size / zoomable view inside popup -->
-    <img src="path/to/image.jpg" style="width: 100%; height: auto; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.5);">
-  </div>
-</dialog>
 
 * **web** serves the UI and a small JSON API. The dashboard polls one `snapshot` endpoint (a single
   aria2 `system.multicall`), no WebSocket and no broker needed.
