@@ -30,6 +30,28 @@ graph TD
   <img src="https://files.catbox.moe/wtuttw.png" width="20%" alt="Powered by Django">
 </p>
 
+<p align="center">
+  <a href="https://files.catbox.moe/e4da8v.png" target="_blank">
+    <img src="https://files.catbox.moe/e4da8v.png" width="500" alt="Screenshot 1">
+  </a>
+  <a href="https://files.catbox.moe/26f5kk.png" target="_blank">
+    <img src="https://files.catbox.moe/26f5kk.png" width="500" alt="Screenshot 2">
+  </a>
+  <a href="https://files.catbox.moe/139p3t.png" target="_blank">
+    <img src="https://files.catbox.moe/139p3t.png" width="500" alt="Screenshot 3">
+  </a>
+  <a href="https://files.catbox.moe/1u27a2.png" target="_blank">
+    <img src="https://files.catbox.moe/1u27a2.png" width="500" alt="Screenshot 4">
+  </a>
+</p>
+
+<dialog id="zoomModal" onclick="this.close()" style="border: none; background: transparent; padding: 0; max-width: 90vw; max-height: 90vh;">
+  <div align="center" style="position: relative;">
+    <!-- Full size / zoomable view inside popup -->
+    <img src="path/to/image.jpg" style="width: 100%; height: auto; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.5);">
+  </div>
+</dialog>
+
 * **web** serves the UI and a small JSON API. The dashboard polls one `snapshot` endpoint (a single
   aria2 `system.multicall`), no WebSocket and no broker needed.
 * **scheduler** is a plain long-running process, one loop, one tick per second. It counts what runs in

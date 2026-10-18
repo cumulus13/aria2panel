@@ -5,3 +5,4 @@ cryptography>=43
 whitenoise>=6.7
 gunicorn>=22
 dj-database-url>=2.2
+envdot

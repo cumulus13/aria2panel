@@ -1,12 +1,22 @@
+#!/usr/bin/env python3
+
+# File: aria2panel/settings.py
+# Author: Hadi Cahyadi <cumulus13@gmail.com>
+# Date: 2026-10-19
+# Description: 
+# License: MIT
+
 """Settings. Only bootstrap configuration lives in the environment (DB url, secret
 key, hosts); everything else is stored in the database, see core/conf.py."""
 import os
 from pathlib import Path
+from envdot import load_env
 
 import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_env(str(BASE_DIR / '.env'))
 
 
 def env(name, default=None):
