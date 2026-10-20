@@ -3,10 +3,14 @@ set -e
 case "$1" in
   web)
     python manage.py migrate --noinput
+    python manage.py createcachetable
     python manage.py bootstrap
+    # gthread: every open event stream (SSE) holds one thread, workers x threads = max concurrent streams
     exec gunicorn aria2panel.wsgi:application \
       --bind 0.0.0.0:8000 \
-      --workers "${GUNICORN_WORKERS:-3}" \
+      --worker-class gthread \
+      --workers "${GUNICORN_WORKERS:-2}" \
+      --threads "${GUNICORN_THREADS:-32}" \
       --timeout "${GUNICORN_TIMEOUT:-60}" \
       --access-logfile -
     ;;

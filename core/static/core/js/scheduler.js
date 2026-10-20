@@ -2,7 +2,7 @@
   'use strict';
   var P = window.Panel, esc = P.esc;
   var root = document.getElementById('sched');
-  var base = '/api/servers/' + root.dataset.server;
+  var base = '/api/v1/servers/' + root.dataset.server;
   var $ = function (s) { return document.querySelector(s); };
   var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   var state = { data: null, formLoaded: false, ruleId: null, whenId: null, editing: false };

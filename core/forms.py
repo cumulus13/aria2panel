@@ -71,7 +71,7 @@ class SettingsForm(BootstrapMixin, forms.Form):
             elif typ == "list":
                 field = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), **{**kw, "initial": "\n".join(item["value"])})
             else:
-                field = forms.CharField(**{**kw, "required": True})
+                field = forms.CharField(**{**kw, "required": item["default"] != ""})
             self.fields[name] = field
             self.keys[name] = key
         self._style()

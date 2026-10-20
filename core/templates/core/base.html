@@ -44,6 +44,7 @@
         <div class="dropdown">
           <button class="btn btn-sm btn-nav dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-person-circle"></i> {{ user.get_username }}</button>
           <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="{% url 'tokens' %}"><i class="bi bi-key"></i> API tokens</a></li>
             {% if user.is_superuser %}<li><a class="dropdown-item" href="{% url 'admin:index' %}"><i class="bi bi-shield-lock"></i> Admin</a></li><li><hr class="dropdown-divider"></li>{% endif %}
             <li><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="dropdown-item" type="submit"><i class="bi bi-box-arrow-right"></i> Sign out</button></form></li>
           </ul>

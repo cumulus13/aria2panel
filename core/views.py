@@ -1,22 +1,27 @@
 import json
 import logging
 import re
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
+from math import ceil
 from functools import wraps
 
 from django.contrib import messages
+from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.exceptions import ValidationError
 from django.db import connection
-from django.http import Http404, JsonResponse
+from django.core.cache import caches
+from django.http import Http404, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.middleware.csrf import CsrfViewMiddleware
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from . import conf, scheduler, services
+from . import conf, openapi, scheduler, services, sse
 from .aria2 import Aria2Client, Aria2ConnectionError, Aria2Error
 from .forms import ServerForm, SettingsForm
-from .models import WEEKDAYS, Aria2Server, QueueItem, SpeedRule, SPEED_VALIDATOR
+from .models import SPEED_VALIDATOR, WEEKDAYS, Aria2Server, ApiToken, DownloadEvent, QueueItem, SpeedRule, SpeedSample
 
 log = logging.getLogger("core.views")
 staff_required = user_passes_test(lambda u: u.is_active and u.is_staff, login_url="login")
@@ -34,16 +39,41 @@ def pick_server(request):
     return chosen, servers
 
 
-def api(methods=("GET",), staff=False):
+_csrf_check = CsrfViewMiddleware(lambda request: None)
+SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
+API_VERSION = 1
+
+
+def _unauthorized(message):
+    return JsonResponse({"error": message}, status=401, headers={"WWW-Authenticate": 'Bearer realm="aria2panel"'})
+
+
+def api(methods=("GET",), staff=False, auth=True):
+    """JSON endpoint. Authenticated by `Authorization: Bearer <token>` (no CSRF needed) or by
+    the browser session (CSRF token required for unsafe methods)."""
+
     def decorator(view):
+        @csrf_exempt
         @wraps(view)
         def wrapper(request, *args, **kwargs):
             if request.method not in methods:
                 return JsonResponse({"error": "method not allowed"}, status=405)
-            if not request.user.is_authenticated:
-                return JsonResponse({"error": "authentication required"}, status=401)
-            if staff and not request.user.is_staff:
-                return JsonResponse({"error": "administrator rights required"}, status=403)
+            request.api_token = None
+            if auth:
+                header = request.META.get("HTTP_AUTHORIZATION", "")
+                if header[:7].lower() == "bearer ":
+                    token = ApiToken.authenticate(header[7:].strip())
+                    if token is None:
+                        return _unauthorized("invalid or expired token")
+                    request.user, request.api_token = token.user, token
+                    if token.read_only and request.method not in SAFE_METHODS:
+                        return JsonResponse({"error": "this token is read-only"}, status=403)
+                elif not request.user.is_authenticated:
+                    return _unauthorized("authentication required")
+                elif request.method not in SAFE_METHODS and _csrf_check.process_view(request, None, (), {}) is not None:
+                    return JsonResponse({"error": "CSRF verification failed"}, status=403)
+                if staff and not request.user.is_staff:
+                    return JsonResponse({"error": "administrator rights required"}, status=403)
             try:
                 return view(request, *args, **kwargs)
             except Http404:
@@ -165,6 +195,24 @@ def settings_page(request):
 @api()
 def api_snapshot(request, server_id):
     return JsonResponse(services.snapshot(server_or_404(server_id)))
+
+
+@api()
+def api_history(request, server_id):
+    server = server_or_404(server_id)
+    seconds = max(10, min(int(request.GET.get("seconds", 300)), 24 * 3600))
+    now = timezone.now()
+    rows = list(
+        SpeedSample.objects.filter(server=server, ts__gte=now - timedelta(seconds=seconds))
+        .order_by("ts").values_list("ts", "download", "upload")
+    )
+    if len(rows) > 600:
+        rows = rows[:: ceil(len(rows) / 600)]
+    return JsonResponse({
+        "now": int(now.timestamp() * 1000),  # lets the browser correct for clock differences
+        "interval": conf.get("history.interval_seconds"),
+        "samples": [[int(ts.timestamp() * 1000), d, u] for ts, d, u in rows],
+    })
 
 
 @api(methods=("POST",))
@@ -393,3 +441,157 @@ def api_rules(request, server_id):
     rule.full_clean(exclude=["server"])
     rule.save()
     return JsonResponse({"ok": 1, "id": rule.pk})
+
+
+# ---------------------------------------------------------------- api v1: meta, auth, tokens
+@api(auth=False)
+def api_openapi(request):
+    return JsonResponse(openapi.build_spec())
+
+
+@api(auth=False)
+def api_root(request):
+    return JsonResponse({
+        "name": conf.get("app.site_name"), "api_version": API_VERSION,
+        "server_time": int(timezone.now().timestamp() * 1000),
+        "features": ["token-auth", "sse", "progress", "event-history", "scheduler", "speed-history", "push-ntfy", "webhook"],
+    })
+
+
+def _user_dict(user):
+    return {"id": user.pk, "username": user.get_username(), "is_staff": user.is_staff}
+
+
+def _token_dict(t):
+    return {
+        "id": t.pk, "name": t.name, "prefix": t.prefix, "read_only": t.read_only,
+        "created_at": t.created_at.isoformat(), "last_used_at": t.last_used_at.isoformat() if t.last_used_at else None,
+        "expires_at": t.expires_at.isoformat() if t.expires_at else None,
+    }
+
+
+LOGIN_ATTEMPTS, LOGIN_WINDOW = 5, 300
+
+
+@api(methods=("POST",), auth=False)
+def api_login(request):
+    data = body(request)
+    username, password = str(data.get("username", "")).strip(), str(data.get("password", ""))
+    key = "login:%s:%s" % (request.META.get("REMOTE_ADDR", ""), username.lower())
+    cache = caches["shared"]
+    failures = cache.get(key, 0)
+    if failures >= LOGIN_ATTEMPTS:
+        return JsonResponse({"error": "too many attempts, try again later"}, status=429, headers={"Retry-After": str(LOGIN_WINDOW)})
+    user = authenticate(request, username=username, password=password)
+    if user is None or not user.is_active:
+        cache.set(key, failures + 1, LOGIN_WINDOW)
+        return JsonResponse({"error": "invalid username or password"}, status=401)
+    cache.delete(key)
+    days = int(data.get("expires_days") or 0)
+    token, plain = ApiToken.issue(
+        user, str(data.get("device_name") or "mobile app"),
+        expires_at=timezone.now() + timedelta(days=days) if days > 0 else None,
+    )
+    return JsonResponse({"token": plain, "token_type": "Bearer", "user": _user_dict(user), "token_info": _token_dict(token)}, status=201)
+
+
+@api()
+def api_me(request):
+    return JsonResponse({"user": _user_dict(request.user), "token": _token_dict(request.api_token) if request.api_token else None})
+
+
+@api(methods=("POST",))
+def api_logout(request):
+    if request.api_token is None:
+        raise ValueError("not signed in with a token")
+    request.api_token.revoked_at = timezone.now()
+    request.api_token.save(update_fields=["revoked_at"])
+    return JsonResponse({"ok": 1})
+
+
+@api(methods=("GET", "POST"))
+def api_tokens(request):
+    if request.method == "POST":
+        data = body(request)
+        days = int(data.get("expires_days") or 0)
+        token, plain = ApiToken.issue(
+            request.user, str(data.get("name") or "token"), bool(data.get("read_only")),
+            timezone.now() + timedelta(days=days) if days > 0 else None,
+        )
+        return JsonResponse({"token": plain, "token_info": _token_dict(token)}, status=201)
+    tokens = request.user.api_tokens.filter(revoked_at__isnull=True)
+    return JsonResponse({"tokens": [_token_dict(t) for t in tokens]})
+
+
+@api(methods=("POST", "DELETE"))
+def api_token_revoke(request, token_id):
+    token = get_object_or_404(ApiToken, pk=token_id, user=request.user, revoked_at__isnull=True)
+    token.revoked_at = timezone.now()
+    token.save(update_fields=["revoked_at"])
+    return JsonResponse({"ok": 1})
+
+
+@api()
+def api_servers(request):
+    return JsonResponse({"servers": [
+        {"id": s.pk, "name": s.name, "is_default": s.is_default,
+         "scheduler": {"enabled": s.scheduler_enabled, "max_downloads": s.max_downloads}}
+        for s in Aria2Server.objects.filter(enabled=True)
+    ]})
+
+
+# ---------------------------------------------------------------- api v1: live data
+@api()
+def api_progress(request, server_id):
+    return JsonResponse(services.progress(server_or_404(server_id)))
+
+
+@api()
+def api_events_history(request, server_id):
+    server = server_or_404(server_id)
+    limit = max(1, min(int(request.GET.get("limit", 100)), 500))
+    qs = DownloadEvent.objects.filter(server=server)
+    if request.GET.get("after") not in (None, ""):
+        rows = list(qs.filter(id__gt=int(request.GET["after"])).order_by("id")[:limit])
+    else:
+        rows = list(qs.order_by("-id")[:limit])[::-1]
+    return JsonResponse({"events": [e.as_dict() for e in rows], "last_id": rows[-1].pk if rows else sse.latest_event_id(server)})
+
+
+@api()
+def api_events(request, server_id):
+    """text/event-stream, see core/sse.py for the protocol."""
+    server = server_or_404(server_id)
+    raw = request.headers.get("Last-Event-ID") or request.GET.get("after")
+    last_id = int(raw) if raw not in (None, "") else sse.latest_event_id(server)  # no id: only new events
+    response = StreamingHttpResponse(sse.stream(server, last_id), content_type="text/event-stream; charset=utf-8")
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"  # nginx: do not buffer
+    return response
+
+
+# ---------------------------------------------------------------- pages: API tokens
+@login_required
+@require_http_methods(["GET", "POST"])
+def token_page(request):
+    if request.method == "POST":
+        days = request.POST.get("expires_days") or "0"
+        token, plain = ApiToken.issue(
+            request.user, request.POST.get("name") or "token", bool(request.POST.get("read_only")),
+            timezone.now() + timedelta(days=int(days)) if days.isdigit() and int(days) > 0 else None,
+        )
+        request.session["new_token"] = plain
+        return redirect("tokens")
+    return render(request, "core/tokens.html", {
+        "tokens": request.user.api_tokens.filter(revoked_at__isnull=True), "new_token": request.session.pop("new_token", None), "nav": "tokens",
+    })
+
+
+@login_required
+@require_POST
+def token_revoke(request, token_id):
+    token = get_object_or_404(ApiToken, pk=token_id, user=request.user, revoked_at__isnull=True)
+    token.revoked_at = timezone.now()
+    token.save(update_fields=["revoked_at"])
+    messages.success(request, "Token “%s” revoked." % token.name)
+    return redirect("tokens")

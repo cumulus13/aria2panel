@@ -131,3 +131,41 @@ class SchedulerLiveTests(LiveAria2Case):
         server.save()
         scheduler.tick(server)
         self.assertEqual(client.get_global_option()["max-concurrent-downloads"], "50")
+
+
+class SpeedHistoryTests(LiveAria2Case):
+    def setUp(self):
+        self.clean_aria2()
+
+    def test_daemon_records_samples_and_respects_the_interval(self):
+        from django.core.management import call_command
+
+        from core.models import SpeedSample
+
+        server = self.make_server()
+        services.add_downloads(server, uri_lines=[[self.url(1)]], options={"max-download-limit": "30K"})
+        tick = scheduler.tick(server)
+        self.assertIsNotNone(tick.download_speed)
+        call_command("run_scheduler", "--once")
+        self.assertEqual(SpeedSample.objects.filter(server=server).count(), 1)
+        sample = SpeedSample.objects.get(server=server)
+        self.assertGreaterEqual(sample.download, 0)
+        # unreachable aria2: no sample, no crash
+        server.rpc_url = "http://127.0.0.1:1/jsonrpc"
+        server.save()
+        call_command("run_scheduler", "--once")
+        self.assertEqual(SpeedSample.objects.filter(server=server).count(), 1)
+
+    def test_old_samples_are_pruned(self):
+        from datetime import timedelta
+
+        from django.core.management import call_command
+        from django.utils import timezone
+
+        from core.models import SpeedSample
+
+        server = self.make_server()
+        old = SpeedSample.objects.create(server=server, download=1)
+        SpeedSample.objects.filter(pk=old.pk).update(ts=timezone.now() - timedelta(hours=3))
+        call_command("run_scheduler", "--once")
+        self.assertFalse(SpeedSample.objects.filter(pk=old.pk).exists())

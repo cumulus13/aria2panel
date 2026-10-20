@@ -34,24 +34,43 @@ class TickResult:
     failed: int = 0
     queued: int = 0
     skipped: bool = False
+    download_speed: int = None  # global speed seen in this tick, None when aria2 was unreachable
+    upload_speed: int = None
+    info: dict = None  # raw probe() result, used by the event tracker
 
 
-def running_info(client):
-    """(running, seeding): downloads that occupy a slot = active ones (torrents that only
-    seed do not) plus waiting ones that are not paused; seeding = active seeders."""
+def probe(client):
+    """One round trip: slots in use, seeders, the global speed and which downloads exist.
+
+    running = active downloads (torrents that only seed do not count) plus waiting ones
+    that are not paused. Paused downloads do not use a slot."""
     result = client.multicall(
         [
             ("tellActive", [["gid", "status", "seeder"]]),
             ("tellWaiting", [0, 1000, ["gid", "status"]]),
+            ("getGlobalStat", []),
+            ("tellStopped", [-1, 30, ["gid", "status"]]),  # the 30 most recent finished ones
         ]
     )
     for r in result:
         if isinstance(r, Aria2Error):
             raise r
-    active, waiting = result
+    active, waiting, stat, stopped = result
     seeding = sum(1 for d in active if str(d.get("seeder", "false")).lower() == "true")
     running = len(active) - seeding + sum(1 for d in waiting if d.get("status") != "paused")
-    return running, seeding
+    return {
+        "running": running,
+        "seeding": seeding,
+        "download": int(stat.get("downloadSpeed", 0)),
+        "upload": int(stat.get("uploadSpeed", 0)),
+        "live_gids": {d["gid"] for d in active} | {d["gid"] for d in waiting},
+        "stopped": {d["gid"]: d.get("status") for d in stopped},
+    }
+
+
+def running_info(client):
+    info = probe(client)
+    return info["running"], info["seeding"]
 
 
 def running_count(client):
@@ -128,7 +147,8 @@ def tick(server_or_pk):
         client = server.client()
         try:
             apply_speed_rules(server, client, now)
-            running, seeding = running_info(client)
+            info = probe(client)
+            running, seeding = info["running"], info["seeding"]
             sync_concurrency(server, client, seeding)
         except Aria2Error as exc:
             log.warning("%s: aria2 unavailable: %s", server.name, exc)
@@ -141,7 +161,10 @@ def tick(server_or_pk):
         )
         # scheduler disabled: no limit, the queue is flushed to aria2
         free = (server.max_downloads - running) if server.scheduler_enabled else None
-        result = TickResult(running=running, free=max(free, 0) if free is not None else -1)
+        result = TickResult(
+            running=running, free=max(free, 0) if free is not None else -1,
+            download_speed=info["download"], upload_speed=info["upload"], info=info,
+        )
         budget = free  # None = unlimited
         if budget is None or budget > 0:
             for item in due[:1000]:

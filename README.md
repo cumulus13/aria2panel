@@ -88,7 +88,7 @@ hosts, TLS flags, see `.env.example`). Everything else is stored in the database
 
 | Where | What |
 |---|---|
-| `Settings` page (`core.Setting`) | site name, default theme, refresh interval, scheduler tick, retention, RPC timeout, allowed download directories |
+| `Settings` page (`core.Setting`) | site name, default theme, refresh interval, scheduler tick, retention, RPC timeout, allowed download directories, event stream and push notification (ntfy / webhook) options |
 | `Servers` page (`core.Aria2Server`) | RPC URL, RPC secret (Fernet encrypted), TLS verify, scheduler on/off, max downloads, default speed limits |
 | `Scheduler` page | queue, speed rules (`core.QueueItem`, `core.SpeedRule`) |
 
@@ -121,12 +121,20 @@ entry in `core/conf.py`, the Settings form is generated from it. Values are cach
 * Set `DJANGO_BEHIND_PROXY`, `DJANGO_SECURE_COOKIES`, `DJANGO_SSL_REDIRECT`, `DJANGO_HSTS_SECONDS` behind TLS.
 * `GET /healthz` (no auth) checks the database, used by the container healthcheck.
 
-## API (session auth + `X-CSRFToken`)
+## API for apps (v1)
 
-`GET /api/servers/<id>/snapshot/` · `POST …/add/` (multipart: `uris`, `files`, `options`, `not_before`) ·
+Token (Bearer) authenticated JSON API plus an SSE event stream with replay, OpenAPI at `/api/v1/openapi.json`,
+full guide incl. an Android design without Firebase in **[docs/API.md](docs/API.md)**. Create tokens under user menu → *API tokens*.
+Completion/error push notifications: set `notify.ntfy_url` (works with self-hosted ntfy, no Firebase) and/or `notify.webhook_url` on the Settings page.
+Each open event stream uses one gunicorn thread (`GUNICORN_WORKERS` x `GUNICORN_THREADS`). RPC secrets are encrypted with a key derived from
+`DJANGO_SECRET_KEY`; set `FIELD_ENCRYPTION_KEY` so rotating the secret key does not lock you out of them.
+
+## Browser API (same endpoints, session auth + `X-CSRFToken`)
+
+`GET /api/v1/servers/<id>/snapshot/` · `POST …/add/` (multipart: `uris`, `files`, `options`, `not_before`) ·
 `POST …/action/` (`pause|unpause|forcePause|remove|forceRemove|retry|pauseAll|unpauseAll|purge`) ·
 `GET …/download/<gid>/` · `GET|POST …/global/` · `GET|POST …/scheduler/` · `POST …/queue/`
-(`up|down|top|bottom|remove|start|schedule|clear`) · `POST …/rules/` · `POST /api/servers/test/`
+(`up|down|top|bottom|remove|start|schedule|clear`) · `POST …/rules/` · `POST /api/v1/servers/test/`
 
 ## Tests
 

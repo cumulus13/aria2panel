@@ -12,7 +12,7 @@
             <div><div class="stat-label"><i class="bi bi-arrow-down-circle-fill text-primary"></i> Download</div><div class="stat-value" id="st-down">0 B/s</div></div>
             <div class="text-end"><div class="stat-label"><i class="bi bi-arrow-up-circle-fill text-success"></i> Upload</div><div class="stat-value" id="st-up">0 B/s</div></div>
           </div>
-          <canvas id="spark" class="spark mt-2" height="70"></canvas>
+          <canvas id="spark" class="spark mt-2"></canvas>
         </div>
       </div>
     </div>
@@ -142,4 +142,4 @@
   </form></div></div>
 </div>
 {% endblock %}
-{% block scripts %}<script src="{% static 'core/js/dashboard.js' %}?v={{ asset_version }}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'core/js/chart.js' %}?v={{ asset_version }}"></script><script src="{% static 'core/js/dashboard.js' %}?v={{ asset_version }}"></script>{% endblock %}

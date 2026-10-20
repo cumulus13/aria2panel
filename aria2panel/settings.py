@@ -15,23 +15,23 @@ from envdot import load_env
 import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 
+#from .env import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_env(str(BASE_DIR / '.env'))
+# `python manage.py ...` / gunicorn outside Docker: read BASE_DIR/.env (docker compose passes it itself)
+#load_dotenv(BASE_DIR / ".env")
 
 
-def env(name, default=None):
-    return os.environ.get(name, default)
+def env(name, default=None, cast_type=None):
+    return os.getenv(name, default, cast_type=cast_type)
 
 
 def env_bool(name, default=False):
-    value = os.environ.get(name)
-    if value is None:
-        return default
-    return value.strip().lower() in ("1", "true", "yes", "on")
+    return os.getenv(name, default, cast_type=bool)
 
-
-def env_list(name, default=""):
-    return [x.strip() for x in os.environ.get(name, default).split(",") if x.strip()]
+def env_list(name, default=[]):
+    return os.getenv(name, default, cast_type=list)
 
 
 DEBUG = env_bool("DJANGO_DEBUG", False)
@@ -118,7 +118,11 @@ LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "dashboard"
 LOGOUT_REDIRECT_URL = "login"
 
-CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+    # shared between processes/containers (login throttling), table made by `manage.py createcachetable`
+    "shared": {"BACKEND": "django.core.cache.backends.db.DatabaseCache", "LOCATION": "core_cache"},
+}
 
 # Hardening. The CSRF token is delivered through a <meta> tag, so the cookie can be HttpOnly.
 SESSION_COOKIE_HTTPONLY = True

@@ -42,7 +42,8 @@ class SecretTests(TestCase):
         raw = Aria2Server.objects.values_list("secret_enc", flat=True).get(pk=server.pk)
         self.assertNotIn("topsecret", raw)
         self.assertEqual(Aria2Server.objects.get(pk=server.pk).secret, "topsecret")
-        self.assertEqual(crypto.decrypt("garbage"), "")
+        with self.assertLogs("core.crypto", level="ERROR"):
+            self.assertEqual(crypto.decrypt("garbage"), "")
 
     def test_single_default(self):
         a = Aria2Server.objects.create(name="a", is_default=True)
@@ -104,3 +105,26 @@ class SummaryTests(TestCase):
     def test_summary_numbers(self):
         s = services.summarize({"gid": "g", "status": "active", "totalLength": "1000", "completedLength": "250", "downloadSpeed": "50", "files": []})
         self.assertEqual((s["progress"], s["eta"]), (25.0, 15))
+
+
+class DotenvTests(TestCase):
+    def test_loader(self):
+        import os
+        import tempfile
+
+        from aria2panel.env import load_dotenv
+
+        with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False) as f:
+            f.write("# comment\nPANEL_T_A=1\nexport PANEL_T_B = \"two words\"\nPANEL_T_C=pa#ss=word\nPANEL_T_D=from-file\n\nbroken line\n")
+        os.environ["PANEL_T_D"] = "from-env"
+        try:
+            load_dotenv(f.name)
+            self.assertEqual(os.environ["PANEL_T_A"], "1")
+            self.assertEqual(os.environ["PANEL_T_B"], "two words")
+            self.assertEqual(os.environ["PANEL_T_C"], "pa#ss=word")
+            self.assertEqual(os.environ["PANEL_T_D"], "from-env")  # real env wins
+            load_dotenv(f.name + ".missing")  # no error
+        finally:
+            for k in ("PANEL_T_A", "PANEL_T_B", "PANEL_T_C", "PANEL_T_D"):
+                os.environ.pop(k, None)
+            os.unlink(f.name)

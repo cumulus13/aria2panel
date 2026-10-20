@@ -52,3 +52,15 @@ kbd { background: var(--bs-secondary-bg); color: var(--bs-body-color); }
 .drop-overlay { position: fixed; inset: 0; z-index: 2000; display: none; place-items: center; background: rgba(13,110,253,.18); border: 3px dashed var(--panel-accent); font-size: 1.4rem; font-weight: 600; color: var(--panel-accent); backdrop-filter: blur(2px); }
 .drop-overlay.show { display: grid; }
 @media (max-width: 767px) { .stat-card .stat-value { font-size: 1.3rem; } .search-box { min-width: 100%; order: 9; } }
+
+/* per download speed graph */
+.dl-row { cursor: pointer; }
+.dl-row .chev { width: 14px; flex: none; color: var(--bs-secondary-color); font-size: .75rem; }
+.dl-row .chev i { display: inline-block; transition: transform .15s ease; }
+.dl-row.expanded .chev i { transform: rotate(90deg); }
+.dl-row.expanded > td { border-bottom-color: transparent; }
+.graph-row > td { background: var(--bs-tertiary-bg); padding: .6rem 1rem .8rem; cursor: default; }
+.graph-stats { color: var(--bs-body-color); margin-bottom: .35rem; }
+.item-chart { width: 100%; height: 120px; display: block; }
+.detail-chart { width: 100%; height: 170px; display: block; }
+.spark { height: 80px; }

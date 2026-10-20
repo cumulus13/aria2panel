@@ -7,7 +7,7 @@
     out.className = 'small ms-2 text-body-secondary';
     out.textContent = 'Testing…';
     try {
-      var data = await Panel.post('/api/servers/test/', {
+      var data = await Panel.post('/api/v1/servers/test/', {
         server_id: form.dataset.serverId || null,
         rpc_url: form.elements['rpc_url'].value,
         secret: form.elements['secret'].value,

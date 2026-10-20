@@ -1,9 +1,14 @@
+import hashlib
 import re
+import secrets
+from datetime import timedelta
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models, transaction
 from django.db.models import Max
+from django.utils import timezone
 
 from . import crypto
 
@@ -122,6 +127,104 @@ class QueueItem(models.Model):
             top = QueueItem.objects.filter(server=self.server).aggregate(m=Max("position"))["m"] or 0
             self.position = top + 1
         super().save(*args, **kwargs)
+
+
+class SpeedSample(models.Model):
+    """Global transfer speed sampled by the scheduler daemon, feeds the dashboard graph so it
+    stays continuous across pages, reloads and devices."""
+
+    server = models.ForeignKey(Aria2Server, on_delete=models.CASCADE, related_name="speed_samples")
+    ts = models.DateTimeField(default=timezone.now)
+    download = models.BigIntegerField(default=0)
+    upload = models.BigIntegerField(default=0)
+
+    class Meta:
+        ordering = ["ts"]
+        indexes = [models.Index(fields=["server", "ts"])]
+
+
+class ApiToken(models.Model):
+    """Bearer token for API clients (mobile app, scripts). Only a SHA-256 hash is stored,
+    the plain token is shown once when it is created."""
+
+    PREFIX = "a2p_"
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="api_tokens")
+    name = models.CharField(max_length=100)
+    prefix = models.CharField(max_length=16, editable=False)
+    token_hash = models.CharField(max_length=64, unique=True, editable=False)
+    read_only = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return "%s (%s…)" % (self.name, self.prefix)
+
+    @staticmethod
+    def digest(plain):
+        return hashlib.sha256(plain.encode()).hexdigest()
+
+    @classmethod
+    def issue(cls, user, name, read_only=False, expires_at=None):
+        plain = cls.PREFIX + secrets.token_urlsafe(32)
+        token = cls.objects.create(
+            user=user, name=(name or "token")[:100], prefix=plain[:10], token_hash=cls.digest(plain),
+            read_only=read_only, expires_at=expires_at,
+        )
+        return token, plain
+
+    @property
+    def is_valid(self):
+        if self.revoked_at is not None or not self.user.is_active:
+            return False
+        return self.expires_at is None or self.expires_at > timezone.now()
+
+    @classmethod
+    def authenticate(cls, plain):
+        if not plain or not plain.startswith(cls.PREFIX):
+            return None
+        token = cls.objects.select_related("user").filter(token_hash=cls.digest(plain)).first()
+        if token is None or not token.is_valid:
+            return None
+        now = timezone.now()
+        if token.last_used_at is None or now - token.last_used_at > timedelta(minutes=1):
+            cls.objects.filter(pk=token.pk).update(last_used_at=now)
+        return token
+
+
+class DownloadEvent(models.Model):
+    """Things that happened to downloads, recorded by the scheduler daemon. Clients replay
+    them after a reconnect (SSE Last-Event-ID) so a notification is not lost while offline."""
+
+    class Kind(models.TextChoices):
+        ADDED = "added", "Added"
+        COMPLETED = "completed", "Completed"
+        ERROR = "error", "Error"
+        REMOVED = "removed", "Removed"
+
+    server = models.ForeignKey(Aria2Server, on_delete=models.CASCADE, related_name="events")
+    ts = models.DateTimeField(default=timezone.now)
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    gid = models.CharField(max_length=32)
+    name = models.CharField(max_length=500, blank=True)
+    total = models.BigIntegerField(default=0)
+    error_code = models.CharField(max_length=10, blank=True, default="")
+    error_message = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["id"]
+        indexes = [models.Index(fields=["server", "id"])]
+
+    def as_dict(self):
+        return {
+            "id": self.pk, "kind": self.kind, "gid": self.gid, "name": self.name, "total": self.total,
+            "errorCode": self.error_code, "errorMessage": self.error_message, "ts": int(self.ts.timestamp() * 1000),
+        }
 
 
 class SpeedRule(models.Model):

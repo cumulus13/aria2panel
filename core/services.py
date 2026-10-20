@@ -3,6 +3,8 @@ import base64
 import os
 import posixpath
 import re
+import threading
+import time
 from dataclasses import dataclass, field
 
 from django.db import transaction
@@ -306,3 +308,73 @@ def detail(server, gid):
         })
     info = {k: status.get(k) for k in ("infoHash", "numPieces", "pieceLength", "connections", "numSeeders", "creationDate", "comment") if status.get(k) is not None}
     return {"summary": summary, "files": files, "options": dict(sorted(options.items())), "info": info, "dir": os.path.normpath(status.get("dir", "")) if status.get("dir") else ""}
+
+
+# ---------------------------------------------------------------- live progress (API / SSE)
+PROGRESS_KEYS = [
+    "gid", "status", "totalLength", "completedLength", "downloadSpeed", "uploadSpeed",
+    "connections", "numSeeders", "seeder",
+]
+_names = {}
+_names_lock = threading.Lock()
+_progress_cache = {}
+_progress_lock = threading.Lock()
+
+
+def resolve_names(client, server_pk, gids):
+    """gid -> display name. Names are looked up once per gid (the file list can be large)."""
+    with _names_lock:
+        missing = [g for g in gids if (server_pk, g) not in _names]
+    if missing:
+        results = client.multicall([("tellStatus", [g, ["files", "bittorrent"]]) for g in missing])
+        with _names_lock:
+            if len(_names) > 5000:
+                for key in list(_names)[:2500]:
+                    del _names[key]
+            for gid, r in zip(missing, results):
+                if isinstance(r, Aria2Error):
+                    _names[(server_pk, gid)] = gid
+                else:
+                    r["gid"] = gid
+                    _names[(server_pk, gid)] = display_name(r)
+    with _names_lock:
+        return {g: _names.get((server_pk, g), g) for g in gids}
+
+
+def progress(server, ttl=0.8):
+    """Compact live state of the running downloads, cached for `ttl` seconds so many
+    connected clients share one aria2 round trip."""
+    now = time.monotonic()
+    with _progress_lock:
+        hit = _progress_cache.get(server.pk)
+        if hit and now - hit[0] < ttl:
+            return hit[1]
+    client = server.client()
+    results = client.multicall([("getGlobalStat", []), ("tellActive", [PROGRESS_KEYS])])
+    for r in results:
+        if isinstance(r, Aria2Error):
+            raise r
+    stat, active = results
+    names = resolve_names(client, server.pk, [d["gid"] for d in active])
+    items = []
+    for d in active:
+        total, done, speed = _int(d.get("totalLength")), _int(d.get("completedLength")), _int(d.get("downloadSpeed"))
+        items.append({
+            "gid": d["gid"], "name": names[d["gid"]], "status": d.get("status"),
+            "total": total, "completed": done, "progress": round(done * 100.0 / total, 2) if total else 0.0,
+            "downloadSpeed": speed, "uploadSpeed": _int(d.get("uploadSpeed")),
+            "eta": int((total - done) / speed) if speed > 0 and total > done else None,
+            "connections": _int(d.get("connections")), "seeding": str(d.get("seeder", "false")).lower() == "true",
+        })
+    data = {
+        "global": {k: _int(stat.get(k)) for k in ("downloadSpeed", "uploadSpeed", "numActive", "numWaiting", "numStopped")},
+        "active": items,
+        "scheduler": {
+            "enabled": server.scheduler_enabled, "max": server.max_downloads,
+            "running": sum(1 for i in items if not i["seeding"]),
+            "queued": QueueItem.objects.filter(server=server, status=QueueItem.Status.QUEUED).count(),
+        },
+    }
+    with _progress_lock:
+        _progress_cache[server.pk] = (time.monotonic(), data)
+    return data

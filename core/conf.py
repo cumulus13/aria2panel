@@ -28,6 +28,14 @@ DEFINITIONS = {
     "ui.stopped_limit": (100, int, "Number of finished/failed downloads shown in the dashboard.", {"min": 0, "max": 1000}),
     "scheduler.tick_seconds": (1.0, float, "Interval of the scheduler daemon (seconds).", {"min": 0.2, "max": 60}),
     "scheduler.keep_days": (7, int, "Days to keep dispatched/failed/cancelled queue records.", {"min": 1, "max": 3650}),
+    "history.interval_seconds": (2, int, "How often the scheduler daemon records the transfer speed for the dashboard graph (seconds).", {"min": 1, "max": 60}),
+    "history.keep_minutes": (60, int, "How long speed samples are kept (minutes).", {"min": 5, "max": 1440}),
+    "events.keep_days": (30, int, "Days to keep the download event log (completed/failed), used to replay missed notifications.", {"min": 1, "max": 3650}),
+    "sse.interval_seconds": (1.0, float, "How often live progress is pushed to API clients (seconds).", {"min": 0.5, "max": 10}),
+    "sse.max_seconds": (1800, int, "Maximum lifetime of one event stream, clients reconnect and replay (seconds).", {"min": 60, "max": 86400}),
+    "notify.ntfy_url": ("", str, "ntfy topic URL (https://ntfy.example.com/my-topic) for completion/error push notifications. Empty = off.", {"url": True}),
+    "notify.webhook_url": ("", str, "Webhook that receives a JSON POST for each notified event. Empty = off.", {"url": True}),
+    "notify.events": (["completed", "error"], list, "Which events are sent to ntfy / the webhook (added, completed, error, removed), one per line.", {}),
     "rpc.timeout_seconds": (10.0, float, "Timeout for aria2 RPC calls (seconds).", {"min": 1, "max": 120}),
     "security.allowed_download_dirs": ([], list, "If not empty, downloads may only be saved below these directories (one per line).", {}),
 }
@@ -47,6 +55,8 @@ def _validate(key, value):
         value = _COERCE[typ](value)
     except (TypeError, ValueError):
         raise ConfigError("%s: invalid value" % key)
+    if opts.get("url") and value and not (value.startswith("http://") or value.startswith("https://")):
+        raise ConfigError("%s: must start with http:// or https://" % key)
     if "choices" in opts and value not in opts["choices"]:
         raise ConfigError("%s: must be one of %s" % (key, ", ".join(opts["choices"])))
     if "min" in opts and value < opts["min"]:

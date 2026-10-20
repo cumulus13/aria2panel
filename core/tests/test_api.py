@@ -95,6 +95,24 @@ class ApiTests(LiveAria2Case):
         self.assertTrue(detail["files"])
         self.assertEqual(self.c.get(reverse("api_detail", args=[self.server.pk, "not-a-gid"])).status_code, 400)
 
+    def test_history_endpoint(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from core.models import SpeedSample
+
+        now = timezone.now()
+        for i in range(5):
+            SpeedSample.objects.create(server=self.server, ts=now - timedelta(seconds=10 - i), download=1000 * i, upload=i)
+        SpeedSample.objects.create(server=self.server, ts=now - timedelta(hours=2), download=999)
+        url = reverse("api_history", args=[self.server.pk])
+        data = self.c.get(url + "?seconds=60").json()
+        self.assertEqual([s[1] for s in data["samples"]], [0, 1000, 2000, 3000, 4000])
+        self.assertTrue(data["samples"][0][0] < data["samples"][-1][0] <= data["now"])
+        self.assertEqual(self.c.get(url + "?seconds=abc").status_code, 400)
+        self.assertEqual(Client().get(url).status_code, 401)
+
     def test_add_rejects_bad_input(self):
         def add(**data):
             return self.c.post(reverse("api_add", args=[self.server.pk]), data=data, **self.csrf())
@@ -153,7 +171,7 @@ class ApiTests(LiveAria2Case):
         self.assertEqual((second.secret, second.max_downloads), ("abc", 6))  # blank secret keeps the stored one
         self.assertEqual(self.c.post(reverse("server_delete", args=[second.pk]), **self.csrf()).status_code, 302)
 
-        form = {"app__site_name": "Panel X", "ui__default_theme": "dark", "ui__poll_interval_ms": 2000, "ui__stopped_limit": 50, "scheduler__tick_seconds": 1, "scheduler__keep_days": 7, "rpc__timeout_seconds": 10, "security__allowed_download_dirs": "/downloads"}
+        form = {"app__site_name": "Panel X", "ui__default_theme": "dark", "ui__poll_interval_ms": 2000, "ui__stopped_limit": 50, "scheduler__tick_seconds": 1, "scheduler__keep_days": 7, "history__interval_seconds": 2, "history__keep_minutes": 60, "events__keep_days": 30, "sse__interval_seconds": 1, "sse__max_seconds": 1800, "notify__ntfy_url": "", "notify__webhook_url": "", "notify__events": "completed\nerror", "rpc__timeout_seconds": 10, "security__allowed_download_dirs": "/downloads"}
         r = self.c.post(reverse("settings"), form, **self.csrf())
         self.assertEqual(r.status_code, 302, r.content[:800])
         conf_values = (conf.get("app.site_name"), conf.get("ui.default_theme"), conf.get("security.allowed_download_dirs"))

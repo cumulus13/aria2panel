@@ -5,7 +5,7 @@
   var serverId = root.dataset.server;
   var poll = parseInt(root.dataset.poll, 10) || 1500;
   var isStaff = root.dataset.staff === '1';
-  var base = '/api/servers/' + serverId;
+  var base = '/api/v1/servers/' + serverId;
   var $ = function (s) { return document.querySelector(s); };
 
   var RANK = { active: 0, waiting: 1, queued: 2, paused: 3, error: 4, complete: 5, removed: 6 };
@@ -21,7 +21,10 @@
   };
   var BAR = { active: 'bg-primary progress-bar-striped progress-bar-animated', seeding: 'bg-success', waiting: 'bg-secondary', queued: 'bg-info', paused: 'bg-warning', complete: 'bg-success', error: 'bg-danger', removed: 'bg-dark' };
 
-  var state = { filter: 'all', search: '', items: [], selected: new Set(), cache: {}, order: '', down: [], up: [], timer: null, failures: 0 };
+  var GLOBAL_MS = 300000, ITEM_MS = 180000, DETAIL_MS = 300000, KEEP_MS = 600000;
+  var state = { filter: 'all', search: '', items: [], selected: new Set(), cache: {}, order: '', trs: {}, timer: null, failures: 0,
+    ghist: [], hist: {}, expanded: new Set(), detail: null };
+  var SKEY = 'panel-dash:' + serverId, lastSave = 0;
   var rows = $('#rows');
 
   function rank(d) { return RANK[d.status] !== undefined ? RANK[d.status] : 9; }
@@ -59,7 +62,7 @@
     var pct = d.queued ? 0 : d.progress;
     var speed = (d.downloadSpeed ? '<div><i class="bi bi-arrow-down text-primary"></i> ' + P.fmtSpeed(d.downloadSpeed) + '</div>' : '') + (d.uploadSpeed ? '<div><i class="bi bi-arrow-up text-success"></i> ' + P.fmtSpeed(d.uploadSpeed) + '</div>' : '') || '–';
     return '<td><input class="form-check-input row-check" type="checkbox" data-gid="' + esc(d.gid) + '"' + (state.selected.has(d.gid) ? ' checked' : '') + '></td>' +
-      '<td class="dl-name"><div class="d-flex align-items-center gap-2"><span class="dl-icon"><i class="bi ' + icon + '"></i></span><div class="min-w-0"><div class="name" title="' + esc(d.name) + '">' + esc(d.name) + '</div>' + sub + '</div></div></td>' +
+      '<td class="dl-name"><div class="d-flex align-items-center gap-2">' + (d.queued ? '<span class="chev"></span>' : '<span class="chev"><i class="bi bi-chevron-right"></i></span>') + '<span class="dl-icon"><i class="bi ' + icon + '"></i></span><div class="min-w-0"><div class="name" title="' + esc(d.name) + '">' + esc(d.name) + '</div>' + sub + '</div></div></td>' +
       '<td class="text-end num d-none d-md-table-cell">' + size + '</td>' +
       '<td><div class="d-flex align-items-center gap-2"><div class="progress flex-grow-1" style="height:8px"><div class="progress-bar ' + BAR[k] + '" style="width:' + (k === 'complete' ? 100 : pct) + '%"></div></div><span class="pct">' + (k === 'complete' ? '100' : pct.toFixed(1)) + '%</span></div></td>' +
       '<td class="text-end num d-none d-lg-table-cell">' + speed + '</td>' +
@@ -68,52 +71,99 @@
       '<td class="text-end">' + actions(d) + '</td>';
   }
 
+  function isExpanded(d) { return !d.queued && state.expanded.has(d.gid); }
+
+  function itemStats(d) {
+    var a = (state.hist[d.gid] || []).filter(function (p) { return p[0] > Date.now() - ITEM_MS; });
+    var avg = a.length ? a.reduce(function (x, p) { return x + p[1]; }, 0) / a.length : 0;
+    var peak = a.reduce(function (m, p) { return Math.max(m, p[1]); }, 0);
+    return '<span class="me-3"><i class="bi bi-arrow-down text-primary"></i> ' + P.fmtSpeed(d.downloadSpeed) + '</span>' +
+      '<span class="me-3"><i class="bi bi-arrow-up text-success"></i> ' + P.fmtSpeed(d.uploadSpeed) + '</span>' +
+      '<span class="text-body-secondary">avg ' + P.fmtSpeed(avg) + ' \u00b7 peak ' + P.fmtSpeed(peak) + (d.connections ? ' \u00b7 ' + d.connections + ' connections' : '') + (d.status === 'active' ? ' \u00b7 ETA ' + P.fmtEta(d.eta) : '') + '</span>';
+  }
+
+  // the chart of one download: its own recorded speed, anchored to now while it is running
+  function itemSeries(gid, big) {
+    var d = find(gid), pts = state.hist[gid] || [];
+    var live = d && d.status === 'active';
+    var end = live || !pts.length ? Date.now() : pts[pts.length - 1][0] + 4000;
+    return { points: pts, opts: { windowMs: big ? DETAIL_MS : ITEM_MS, end: end, axis: true, empty: 'No speed recorded for this download yet', width: big ? 900 : 900, height: big ? 170 : 120 } };
+  }
+  function globalSeries() { return { points: state.ghist, opts: { windowMs: GLOBAL_MS, gapMs: 9000, width: 520, height: 80 } }; }
+
+  function graphRow(d) {
+    return '<tr class="graph-row" data-graph="' + esc(d.gid) + '"><td></td><td colspan="7"><div class="graph-stats small" data-stats="' + esc(d.gid) + '">' + itemStats(d) + '</div><canvas class="item-chart" data-chart="' + esc(d.gid) + '"></canvas></td></tr>';
+  }
+
   function renderRows(visible) {
-    var order = visible.map(function (d) { return d.gid; }).join(',');
+    var order = visible.map(function (d) { return d.gid + (isExpanded(d) ? '+' : ''); }).join(',');
     if (order !== state.order) {
       rows.innerHTML = visible.map(function (d) {
-        return '<tr data-gid="' + esc(d.gid) + '"' + (state.selected.has(d.gid) ? ' class="selected"' : '') + '>' + inner(d) + '</tr>';
+        return '<tr class="dl-row' + (state.selected.has(d.gid) ? ' selected' : '') + (isExpanded(d) ? ' expanded' : '') + '" data-gid="' + esc(d.gid) + '">' + inner(d) + '</tr>' + (isExpanded(d) ? graphRow(d) : '');
       }).join('');
       state.order = order;
       state.cache = {};
+      state.trs = {};
+      Array.prototype.forEach.call(rows.children, function (tr) { if (tr.dataset.gid) state.trs[tr.dataset.gid] = tr; });
       visible.forEach(function (d) { state.cache[d.gid] = JSON.stringify(d); });
-      return;
+      Array.prototype.forEach.call(rows.querySelectorAll('canvas.item-chart'), function (c) { P.chart.attach(c, function () { return itemSeries(c.dataset.chart); }); });
+    } else {
+      visible.forEach(function (d) {
+        var sig = JSON.stringify(d);
+        if (state.cache[d.gid] !== sig) { state.cache[d.gid] = sig; state.trs[d.gid].innerHTML = inner(d); }
+      });
     }
-    var trs = rows.children;
-    visible.forEach(function (d, i) {
-      var sig = JSON.stringify(d);
-      if (state.cache[d.gid] !== sig) { state.cache[d.gid] = sig; trs[i].innerHTML = inner(d); }
+    visible.forEach(function (d) {
+      if (!isExpanded(d)) return;
+      var stats = rows.querySelector('[data-stats="' + d.gid + '"]');
+      if (stats) stats.innerHTML = itemStats(d);
+      var canvas = rows.querySelector('canvas[data-chart="' + d.gid + '"]');
+      if (canvas) P.chart.redraw(canvas);
     });
   }
 
-  // ---------------------------------------------------------------- sparkline
-  function drawSpark() {
-    var c = $('#spark');
-    if (!c || !c.getContext) return;
-    var dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
-    if (!w) return;
-    c.width = w * dpr; c.height = h * dpr;
-    var g = c.getContext('2d');
-    if (!g) return;
-    g.scale(dpr, dpr);
-    g.clearRect(0, 0, w, h);
-    var cs = getComputedStyle(document.documentElement);
-    var max = Math.max(1024, Math.max.apply(null, state.down.concat(state.up)));
-    function line(data, color, fill) {
-      if (data.length < 2) return;
-      var step = w / (60 - 1), x0 = w - (data.length - 1) * step;
-      g.beginPath();
-      data.forEach(function (v, i) { var x = x0 + i * step, y = h - 3 - (v / max) * (h - 8); i ? g.lineTo(x, y) : g.moveTo(x, y); });
-      g.strokeStyle = color; g.lineWidth = 2; g.lineJoin = 'round'; g.stroke();
-      if (fill) {
-        g.lineTo(w, h); g.lineTo(x0, h); g.closePath();
-        var gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, color + '55'); gr.addColorStop(1, color + '00');
-        g.fillStyle = gr; g.fill();
-      }
-    }
-    var primary = (cs.getPropertyValue('--bs-primary') || '#0d6efd').trim(), success = (cs.getPropertyValue('--bs-success') || '#198754').trim();
-    line(state.up, success, false);
-    line(state.down, primary, true);
+  // ---------------------------------------------------------------- speed history
+  function drawGlobal() { var c = $('#spark'); if (c) { if (!c._getter) P.chart.attach(c, globalSeries); else P.chart.redraw(c); } }
+
+  function recordHistory(data) {
+    var now = Date.now(), present = {};
+    state.ghist.push([now, data.global.downloadSpeed, data.global.uploadSpeed]);
+    while (state.ghist.length && state.ghist[0][0] < now - KEEP_MS) state.ghist.shift();
+    data.downloads.forEach(function (d) {
+      present[d.gid] = 1;
+      if (d.queued || d.status !== 'active') return;
+      var a = state.hist[d.gid] || (state.hist[d.gid] = []);
+      a.push([now, d.downloadSpeed, d.uploadSpeed]);
+      while (a.length > 1 && a[0][0] < now - KEEP_MS) a.shift();
+    });
+    Object.keys(state.hist).forEach(function (k) { if (!present[k]) delete state.hist[k]; });
+    saveSoon(false);
+  }
+
+  // per download history survives page changes (sessionStorage), the global one comes from the server
+  function saveSoon(force) {
+    if (!force && Date.now() - lastSave < 3000) return;
+    lastSave = Date.now();
+    try { sessionStorage.setItem(SKEY, JSON.stringify({ h: state.hist, x: Array.from(state.expanded) })); } catch (e) { /* storage full or disabled */ }
+  }
+  function restore() {
+    try {
+      var o = JSON.parse(sessionStorage.getItem(SKEY) || '{}'), cutoff = Date.now() - KEEP_MS;
+      Object.keys(o.h || {}).forEach(function (k) {
+        var a = o.h[k].filter(function (p) { return p[0] > cutoff; });
+        if (a.length) state.hist[k] = a;
+      });
+      (o.x || []).forEach(function (g) { state.expanded.add(g); });
+    } catch (e) { /* ignore corrupt data */ }
+  }
+  async function loadGlobalHistory() {
+    try {
+      var r = await P.get(base + '/history/?seconds=' + (GLOBAL_MS / 1000));
+      var off = Date.now() - r.now, firstLive = state.ghist.length ? state.ghist[0][0] : Infinity;
+      var past = r.samples.map(function (s) { return [s[0] + off, s[1], s[2]]; }).filter(function (p) { return p[0] < firstLive; });
+      state.ghist = past.concat(state.ghist);
+      drawGlobal();
+    } catch (e) { /* the graph just starts now */ }
   }
 
   // ---------------------------------------------------------------- render
@@ -128,12 +178,12 @@
     $('#st-slots').textContent = s.enabled ? s.running + ' / ' + s.max : 'off';
     $('#st-slots-bar').style.width = s.enabled ? Math.min(100, s.running * 100 / s.max) + '%' : '0%';
     $('#st-sched-state').textContent = s.enabled ? (s.queued ? s.queued + ' waiting for a slot' : 'slots available') : 'no limit, everything starts at once';
-    state.down.push(g.downloadSpeed); state.up.push(g.uploadSpeed);
-    if (state.down.length > 60) { state.down.shift(); state.up.shift(); }
-    drawSpark();
+    recordHistory(data);
+    drawGlobal();
 
     state.items = data.downloads.slice().sort(function (a, b) { return rank(a) - rank(b); });
     renderList();
+    updateDetailLive();
   }
 
   function renderList() {
@@ -199,6 +249,15 @@
       chk.checked ? state.selected.add(chk.dataset.gid) : state.selected.delete(chk.dataset.gid);
       chk.closest('tr').classList.toggle('selected', chk.checked);
       updateBulk();
+      return;
+    }
+    var tr = ev.target.closest('tr.dl-row');
+    if (tr && tr.dataset.gid.indexOf('q:') !== 0) {  // click a row: show its speed graph
+      var id = tr.dataset.gid;
+      state.expanded.has(id) ? state.expanded.delete(id) : state.expanded.add(id);
+      state.order = '';
+      renderList();
+      saveSoon(true);
     }
   });
   $('#check-all').addEventListener('change', function (ev) {
@@ -321,13 +380,25 @@
       var files = '<table class="table table-sm align-middle mb-0"><thead><tr><th>#</th><th>Path</th><th class="text-end">Size</th><th style="width:140px">Done</th></tr></thead><tbody>' +
         d.files.map(function (f) { return '<tr class="' + (f.selected ? '' : 'text-body-secondary') + '"><td>' + esc(f.index) + '</td><td class="text-break">' + esc(f.path || '(pending)') + '</td><td class="text-end num">' + P.fmtBytes(f.length) + '</td><td><div class="progress" style="height:6px"><div class="progress-bar" style="width:' + f.progress + '%"></div></div></td></tr>'; }).join('') + '</tbody></table>';
       var opts = kv(Object.keys(d.options).map(function (o) { return ['<code>' + esc(o) + '</code>', esc(d.options[o])]; }));
-      $('#detail-body').innerHTML = '<ul class="nav nav-tabs mb-3"><li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#dt-o">Overview</button></li><li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dt-f">Files <span class="badge text-bg-secondary">' + d.files.length + '</span></button></li><li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dt-p">Options</button></li></ul>' +
+      state.detail = gid;
+      $('#detail-body').innerHTML = '<div class="mb-3"><div class="graph-stats small mb-1" id="dt-live"></div><canvas class="detail-chart" id="dt-chart"></canvas></div><ul class="nav nav-tabs mb-3"><li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#dt-o">Overview</button></li><li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dt-f">Files <span class="badge text-bg-secondary">' + d.files.length + '</span></button></li><li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dt-p">Options</button></li></ul>' +
         '<div class="tab-content"><div class="tab-pane fade show active" id="dt-o">' + overview + '</div><div class="tab-pane fade" id="dt-f">' + files + '</div><div class="tab-pane fade" id="dt-p">' + opts + '</div></div>';
+      P.chart.attach($('#dt-chart'), function () { return itemSeries(gid, true); });
+      updateDetailLive();
     } catch (e) {
       $('#detail-title').textContent = 'Details';
       $('#detail-body').innerHTML = '<div class="alert alert-danger mb-0">' + esc(e.message) + '</div>';
     }
   }
+
+  function updateDetailLive() {
+    if (!state.detail) return;
+    var d = find(state.detail), live = $('#dt-live');
+    if (d && live) live.innerHTML = itemStats(d);
+    var c = $('#dt-chart');
+    if (c) P.chart.redraw(c);
+  }
+  document.getElementById('detailModal').addEventListener('hidden.bs.modal', function () { state.detail = null; });
 
   // ---------------------------------------------------------------- global limits (staff)
   var limitsBtn = $('#btn-limits');
@@ -350,7 +421,14 @@
   }
 
   document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
-  document.addEventListener('themechange', drawSpark);
-  window.addEventListener('resize', drawSpark);
+  function redrawAll() {
+    drawGlobal();
+    Array.prototype.forEach.call(document.querySelectorAll('canvas[data-chart], #dt-chart'), function (c) { P.chart.redraw(c); });
+  }
+  document.addEventListener('themechange', redrawAll);
+  window.addEventListener('resize', redrawAll);
+  window.addEventListener('pagehide', function () { saveSoon(true); });
+  restore();
+  loadGlobalHistory();
   refresh();
 })();
