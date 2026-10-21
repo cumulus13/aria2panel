@@ -27,6 +27,7 @@
         <li class="nav-item"><a class="nav-link {% if nav == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
         {% if user.is_staff %}
         <li class="nav-item"><a class="nav-link {% if nav == 'scheduler' %}active{% endif %}" href="{% url 'scheduler' %}"><i class="bi bi-calendar2-check"></i> Scheduler</a></li>
+        <li class="nav-item"><a class="nav-link {% if nav == 'performance' %}active{% endif %}" href="{% url 'performance' %}"><i class="bi bi-lightning-charge"></i> Performance</a></li>
         <li class="nav-item"><a class="nav-link {% if nav == 'servers' %}active{% endif %}" href="{% url 'server_list' %}"><i class="bi bi-hdd-network"></i> Servers</a></li>
         <li class="nav-item"><a class="nav-link {% if nav == 'settings' %}active{% endif %}" href="{% url 'settings' %}"><i class="bi bi-sliders"></i> Settings</a></li>
         {% endif %}

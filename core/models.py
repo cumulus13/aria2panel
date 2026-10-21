@@ -53,6 +53,10 @@ class Aria2Server(models.Model):
         help_text="Keeps aria2's own max-concurrent-downloads in step with the scheduler, so resuming a paused download "
                   "above the limit waits for a free slot instead of starting. Restored when the scheduler is switched off.",
     )
+    default_options = models.JSONField(
+        default=dict, blank=True,
+        help_text="aria2 options added to every new download of this server (split, connections per server, …). Options chosen when adding win.",
+    )
     default_download_limit = models.CharField("Default download limit", max_length=20, default="0", validators=[SPEED_VALIDATOR])
     default_upload_limit = models.CharField("Default upload limit", max_length=20, default="0", validators=[SPEED_VALIDATOR])
     created_at = models.DateTimeField(auto_now_add=True)

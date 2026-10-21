@@ -14,9 +14,9 @@
       <div class="card h-100">
         <div class="card-header fw-semibold"><i class="bi bi-toggles"></i> Concurrency</div>
         <form class="card-body" id="cfg-form">
-          <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="cfg-enabled"><label class="form-check-label" for="cfg-enabled">Limit simultaneous downloads</label>
-            <div class="form-text">When off, everything is sent to aria2 immediately.</div></div>
-          <div class="mb-3"><label class="form-label" for="cfg-max">Max simultaneous downloads</label><input class="form-control" type="number" min="1" max="500" id="cfg-max">
+          <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="cfg-enabled"><label class="form-check-label" for="cfg-enabled">Queue downloads above the limit</label>
+            <div class="form-text">On: at most the number below run at the same time, the rest wait in the queue. Off: everything starts at once. This never changes the speed of a download.</div></div>
+          <div class="mb-3"><label class="form-label" for="cfg-max">How many downloads at the same time</label><input class="form-control" type="number" min="1" max="500" id="cfg-max">
             <div class="form-text">Downloads above this number wait in the queue and start automatically, in order, when one finishes, is paused or fails. Seeding torrents and paused downloads do not count.</div></div>
           <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="cfg-enforce"><label class="form-check-label" for="cfg-enforce">Also enforce inside aria2</label>
             <div class="form-text">Keeps aria2's own concurrency limit in step, so resuming a paused download above the limit waits for a free slot.</div></div>
@@ -24,10 +24,10 @@
             <div class="progress" style="height:8px"><div class="progress-bar" id="s-bar" style="width:0%"></div></div></div>
           <hr>
           <div class="row g-2 mb-3">
-            <div class="col"><label class="form-label small">Default download limit</label><input class="form-control form-control-sm" id="cfg-dl" placeholder="0"></div>
-            <div class="col"><label class="form-label small">Default upload limit</label><input class="form-control form-control-sm" id="cfg-ul" placeholder="0"></div>
+            <div class="col"><label class="form-label small">Speed cap, all downloads together</label><input class="form-control form-control-sm" id="cfg-dl" placeholder="0 = unlimited"></div>
+            <div class="col"><label class="form-label small">Upload cap</label><input class="form-control form-control-sm" id="cfg-ul" placeholder="0 = unlimited"></div>
           </div>
-          <div class="form-text mb-3">Applied outside every speed rule window. Only managed when at least one rule exists or a default is set.</div>
+          <div class="form-text mb-3">A bandwidth cap in bytes per second (500K, 2M). 0 = unlimited. It applies whenever no speed rule below is active and is only managed by the panel when a value or a rule exists. See the <a href="{% url 'performance' %}">Performance</a> page to check what limits really apply.</div>
           <button class="btn btn-primary w-100" type="submit"><i class="bi bi-check-lg"></i> Save</button>
         </form>
       </div>

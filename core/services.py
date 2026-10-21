@@ -35,6 +35,47 @@ class OptionError(ValueError):
     pass
 
 
+# options an administrator can set as defaults for every new download (speed related only)
+RECOMMENDED_DEFAULTS = {
+    "max-connection-per-server": "16", "split": "16", "min-split-size": "1M", "file-allocation": "none", "continue": "true",
+}
+_SIZE = re.compile(r"^(\d+)([KkMm]?)$")
+
+
+def clean_defaults(data):
+    """Validate the per-server default options, empty values are dropped."""
+    out = {}
+    for key, value in (data or {}).items():
+        value = str(value).strip() if value is not None else ""
+        if value == "":
+            continue
+        if key == "max-connection-per-server":
+            if not value.isdigit() or not 1 <= int(value) <= 16:
+                raise OptionError("connections per server must be between 1 and 16")
+        elif key == "split":
+            if not value.isdigit() or not 1 <= int(value) <= 64:
+                raise OptionError("split must be between 1 and 64")
+        elif key == "min-split-size":
+            m = _SIZE.match(value)
+            if not m or int(m.group(1)) * {"": 1, "k": 1024, "m": 1048576}[m.group(2).lower()] < 1048576:
+                raise OptionError("min-split-size must be at least 1M")
+        elif key == "file-allocation":
+            if value not in ("none", "prealloc", "trunc", "falloc"):
+                raise OptionError("file-allocation must be none, prealloc, trunc or falloc")
+        elif key == "continue":
+            value = "true" if value.lower() in ("1", "true", "yes", "on") else "false"
+        elif key == "max-tries":
+            if not value.isdigit() or int(value) > 100:
+                raise OptionError("max-tries must be between 0 and 100")
+        elif key == "user-agent":
+            if len(value) > 300 or "\n" in value:
+                raise OptionError("invalid user-agent")
+        else:
+            raise OptionError("option %s cannot be a default" % key)
+        out[key] = value
+    return out
+
+
 def clean_options(options):
     """Validate user supplied aria2 options (add dialog, global options)."""
     cleaned = {}
@@ -197,7 +238,7 @@ def _create_items(server, specs):
 
 def add_downloads(server, *, uri_lines=(), torrents=(), metalinks=(), options=None, not_before=None):
     """torrents / metalinks: [(filename, bytes)]. Returns AddResult."""
-    options = clean_options(options)
+    options = {**(server.default_options or {}), **clean_options(options)}  # what was chosen when adding wins
     specs = []
     for mirrors in uri_lines:
         specs.append({"kind": QueueItem.Kind.URI, "uris": mirrors, "name": _basename(mirrors[0].split("?")[0]) or mirrors[0], "options": options, "not_before": not_before})
@@ -378,3 +419,92 @@ def progress(server, ttl=0.8):
     with _progress_lock:
         _progress_cache[server.pk] = (time.monotonic(), data)
     return data
+
+
+# ---------------------------------------------------------------- "why is it slow?"
+def human_speed(n):
+    n = float(n)
+    for unit in ("B/s", "KiB/s", "MiB/s", "GiB/s"):
+        if n < 1024 or unit == "GiB/s":
+            return ("%d %s" % (n, unit)) if unit == "B/s" else ("%.1f %s" % (n, unit))
+        n /= 1024
+
+
+def _num(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def analyze(opts, effective, panel, per_download):
+    """Pure function: turn aria2's options into plain language hints.
+    opts: aria2 global options, effective: options a new download really gets (aria2 + panel defaults),
+    panel: {managed, rule, scheduler...}, per_download: [{gid, name, limit}]."""
+    hints = []
+
+    def add(level, code, message):
+        hints.append({"level": level, "code": code, "message": message})
+
+    for direction, key in (("download", "max-overall-download-limit"), ("upload", "max-overall-upload-limit")):
+        limit = _num(opts.get(key))
+        if limit <= 0 or (direction == "upload"):
+            continue
+        if panel["managed"]:
+            where = "the speed rule “%s”" % panel["rule"] if panel["rule"] else "the default download limit on the Scheduler page"
+            add("warning", "panel_limit", "All downloads together are capped at %s by %s. Change or remove it there (0 = unlimited)." % (human_speed(limit), where))
+        else:
+            add("warning", "aria2_limit", "aria2 is capped at %s for all downloads together (max-overall-download-limit). It comes from aria2.conf or an earlier RPC call. Set it to 0 below to remove it." % human_speed(limit))
+    for item in per_download:
+        add("warning", "download_limit", "“%s” has its own speed cap of %s (max-download-limit). Remove it in the details of that download." % (item["name"], human_speed(item["limit"])))
+    if _num(opts.get("lowest-speed-limit")) > 0:
+        add("info", "lowest_speed", "aria2 drops connections slower than %s (lowest-speed-limit)." % human_speed(_num(opts.get("lowest-speed-limit"))))
+    if _num(effective.get("max-connection-per-server")) <= 1:
+        add("info", "one_connection", "Each download uses 1 connection per server, exactly like wget. Servers that allow it are much faster with up to 16: use “Use recommended” below.")
+    if effective.get("file-allocation") == "prealloc":
+        add("info", "prealloc", "File preallocation (aria2's default) reserves the whole file before the transfer starts. That delays big downloads and is slow on network or Windows-mounted disks. “none” starts at once.")
+    directory = str(opts.get("dir", ""))
+    if directory.startswith("/mnt/"):
+        add("warning", "slow_disk", "The download directory %s is a Windows drive mounted into WSL. Writes through it are often far slower than the network, compare with wget writing to the same folder." % directory)
+    if not any(h["level"] == "warning" for h in hints):
+        add("ok", "no_limit", "No speed limit was found in aria2 or in the panel.")
+    return hints
+
+
+def diagnostics(server):
+    client = server.client()
+    results = client.multicall([("getGlobalOption", []), ("tellActive", [["gid", "status", "seeder"]])])
+    for r in results:
+        if isinstance(r, Aria2Error):
+            raise r
+    opts, active = results
+    gids = [d["gid"] for d in active if str(d.get("seeder", "false")).lower() != "true"][:10]
+    limited = []
+    if gids:
+        names = resolve_names(client, server.pk, gids)
+        for gid, r in zip(gids, client.multicall([("getOption", [g]) for g in gids])):
+            if not isinstance(r, Aria2Error) and _num(r.get("max-download-limit")) > 0:
+                limited.append({"gid": gid, "name": names[gid], "limit": _num(r["max-download-limit"])})
+    from django.utils import timezone
+
+    rules = list(server.speed_rules.filter(enabled=True))
+    local = timezone.localtime()
+    rule = next((r for r in rules if r.matches(local)), None)
+    managed = bool(rules) or server.default_download_limit != "0" or server.default_upload_limit != "0"
+    keys = ("max-connection-per-server", "split", "min-split-size", "file-allocation", "continue")
+    effective = {k: opts.get(k) for k in keys}
+    effective.update(server.default_options or {})
+    panel = {"managed": managed, "rule": rule.name if rule else None}
+    return {
+        "limits": {
+            "download": {"bytes": _num(opts.get("max-overall-download-limit")), "human": human_speed(_num(opts.get("max-overall-download-limit"))) if _num(opts.get("max-overall-download-limit")) else "unlimited"},
+            "upload": {"bytes": _num(opts.get("max-overall-upload-limit")), "human": human_speed(_num(opts.get("max-overall-upload-limit"))) if _num(opts.get("max-overall-upload-limit")) else "unlimited"},
+            "managed_by_panel": managed, "active_rule": panel["rule"],
+        },
+        "aria2": {k: opts.get(k) for k in keys + ("max-concurrent-downloads", "dir", "disk-cache")},
+        "effective": effective,
+        "defaults": server.default_options or {},
+        "recommended": RECOMMENDED_DEFAULTS,
+        "per_download_limits": limited,
+        "hints": analyze(opts, effective, panel, limited),
+    }

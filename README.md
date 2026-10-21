@@ -111,6 +111,21 @@ entry in `core/conf.py`, the Settings form is generated from it. Values are cach
   rule is removed. If the scheduler daemon restarts while rules are active the "before" value is lost.
 * Scheduler off: everything is sent to aria2 immediately, as before.
 
+## Speed
+
+Nothing in the panel throttles transfers unless you set a limit. Three places can limit speed:
+
+| Where | What it limits |
+|---|---|
+| **Performance** page → *Speed limit* (aria2 `max-overall-download-limit`) | all downloads together |
+| **Scheduler** page → *Speed cap* and *Speed rules* | all downloads together, by time of day; the panel puts these values into aria2 |
+| **Add** dialog → Options → *Speed limit* (`max-download-limit`) | one download |
+
+The Scheduler's *queue* settings (how many downloads run at the same time) never change speed.
+The **Performance** page shows what really applies and where it comes from, with plain language hints, and lets you
+set defaults for new downloads (connections per server, split, min split size, file allocation, continue).
+aria2's own defaults are one connection per server (like wget) and file preallocation.
+
 ## Security
 
 * Login required everywhere, `Servers`/`Settings`/scheduler configuration need `is_staff`.

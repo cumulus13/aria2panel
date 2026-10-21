@@ -30,6 +30,8 @@ can only `GET` (good for widgets). Errors: `{"error": "…"}` with 400/401/403/4
 | `POST /api/v1/servers/<id>/add/` | multipart: `uris` (one per line), `files`, `options` (JSON), `not_before` |
 | `POST /api/v1/servers/<id>/action/` | `{"action": pause\|unpause\|forcePause\|remove\|forceRemove\|retry\|pauseAll\|unpauseAll\|purge, "gid"/"gids"}` |
 | `GET /api/v1/servers/<id>/download/<gid>/` | details: files, options |
+| `GET /api/v1/servers/<id>/diagnostics/` | why downloads may be slow: effective limits, where they come from, hints |
+| `GET/POST /api/v1/servers/<id>/defaults/` | default aria2 options added to every new download (admin to change) |
 | `GET/POST …/global/` · `GET/POST …/scheduler/` · `POST …/queue/` · `POST …/rules/` | limits, scheduler, queue, speed rules |
 
 ```bash
@@ -112,14 +114,3 @@ val source = EventSources.createFactory(client).newEventSource(req, object : Eve
     override fun onFailure(es: EventSource, t: Throwable?, r: Response?) = scheduleReconnectWithBackoff()
 })
 ```
-
-## 👤 Author
-        
-[Hadi Cahyadi](mailto:cumulus13@gmail.com)
-    
-
-[![Buy Me a Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/cumulus13)
-
-[![Donate via Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/cumulus13)
- 
-[Support me on Patreon](https://www.patreon.com/cumulus13)

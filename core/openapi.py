@@ -106,6 +106,11 @@ def build_spec():
         "/api/v1/servers/{server_id}/snapshot/": dict([op("get", "Everything: all downloads, queued items and scheduler state", "monitor", ok=ref("Snapshot"), params=s)]),
         "/api/v1/servers/{server_id}/progress/": dict([op("get", "Compact state of the running downloads (cheap, good for polling and widgets)", "monitor", ok=ref("Progress"), params=s)]),
         "/api/v1/servers/{server_id}/history/": dict([op("get", "Recorded global speed samples", "monitor", ok=ref("History"), params=s + [{"name": "seconds", "in": "query", "schema": INT}])]),
+        "/api/v1/servers/{server_id}/diagnostics/": dict([op("get", "Why downloads may be slow: effective speed limits, aria2 defaults and plain language hints", "settings", ok=obj({"limits": obj({}), "aria2": obj({}), "effective": obj({}), "defaults": obj({}), "recommended": obj({}), "per_download_limits": arr(obj({})), "hints": arr(obj({"level": {"type": "string", "enum": ["ok", "info", "warning"]}, "code": STR, "message": STR}))}), params=s)]),
+        "/api/v1/servers/{server_id}/defaults/": {
+            **dict([op("get", "aria2 options added to every new download", "settings", ok=obj({"defaults": obj({}), "recommended": obj({})}), params=s)]),
+            **dict([op("post", "Set the default download options (split, connections per server, min-split-size, file-allocation, continue, max-tries, user-agent)", "settings", admin=True, ok=obj({"defaults": obj({}), "recommended": obj({})}), params=s, request=body({"defaults": obj({})}, ["defaults"]))]),
+        },
         "/api/v1/servers/{server_id}/events/": dict([op("get", "Server-Sent Events stream (progress + download events)", "events", params=s + [
             {"name": "Last-Event-ID", "in": "header", "schema": INT, "description": "Resume: replay persisted events with a greater id. Without it only new events are sent. `?after=<id>` works too."}],
             ok=None, extra_responses={"200": {"description": "text/event-stream. Events: snapshot, progress, download.added, download.completed, download.error, download.removed, connection, bye.", "content": {"text/event-stream": {"schema": STR}}}})]),

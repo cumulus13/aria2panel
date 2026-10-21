@@ -595,3 +595,27 @@ def token_revoke(request, token_id):
     token.save(update_fields=["revoked_at"])
     messages.success(request, "Token “%s” revoked." % token.name)
     return redirect("tokens")
+
+
+@api()
+def api_diagnostics(request, server_id):
+    return JsonResponse(services.diagnostics(server_or_404(server_id)))
+
+
+@api(methods=("GET", "POST"))
+def api_defaults(request, server_id):
+    server = server_or_404(server_id)
+    if request.method == "POST":
+        if not request.user.is_staff:
+            return JsonResponse({"error": "administrator rights required"}, status=403)
+        server.default_options = services.clean_defaults(body(request).get("defaults"))
+        server.save(update_fields=["default_options", "updated_at"])
+    return JsonResponse({"defaults": server.default_options or {}, "recommended": services.RECOMMENDED_DEFAULTS})
+
+
+@staff_required
+def performance_page(request):
+    server, servers = pick_server(request)
+    if server is None:
+        return redirect("server_new")
+    return render(request, "core/performance.html", {"server": server, "servers": servers, "nav": "performance"})

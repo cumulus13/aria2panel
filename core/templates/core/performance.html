@@ -1,0 +1,61 @@
+{% extends "core/base.html" %}
+{% load static %}
+{% block title %}Performance{% endblock %}
+{% block content %}
+<div id="perf" data-server="{{ server.pk }}">
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <h1 class="h4 mb-0"><i class="bi bi-lightning-charge"></i> Performance <span class="text-body-secondary fs-6">· {{ server.name }}</span></h1>
+    <button class="btn btn-outline-primary" id="recheck"><i class="bi bi-arrow-repeat"></i> Check again</button>
+  </div>
+  <div id="conn-alert" class="alert alert-danger d-none"><i class="bi bi-wifi-off"></i> <span></span></div>
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="card mb-3">
+        <div class="card-header fw-semibold"><i class="bi bi-stethoscope"></i> Why might downloads be slow?</div>
+        <ul class="list-group list-group-flush" id="hints"><li class="list-group-item text-body-secondary">Checking…</li></ul>
+      </div>
+      <div class="card">
+        <div class="card-header fw-semibold"><i class="bi bi-list-check"></i> What applies right now</div>
+        <div class="table-responsive"><table class="table table-sm mb-0"><tbody id="facts"></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="card mb-3">
+        <div class="card-header fw-semibold"><i class="bi bi-speedometer"></i> Speed limit (all downloads together)</div>
+        <form class="card-body" id="limits-form">
+          <div class="row g-2 mb-2">
+            <div class="col"><label class="form-label small">Download limit</label><input class="form-control" name="max-overall-download-limit" placeholder="0 = unlimited"></div>
+            <div class="col"><label class="form-label small">Upload limit</label><input class="form-control" name="max-overall-upload-limit" placeholder="0 = unlimited"></div>
+          </div>
+          <div class="form-text mb-3">Bytes per second with an optional K or M: <code>500K</code>, <code>2M</code>. <b>0 removes the limit.</b>
+            If you use speed rules or a default cap on the <a href="{% url 'scheduler' %}">Scheduler</a> page, the panel puts those values back when their time window changes.</div>
+          <button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> Apply</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="card-header fw-semibold"><i class="bi bi-sliders2"></i> Defaults for new downloads</div>
+        <form class="card-body" id="defaults-form">
+          <div class="row g-2 mb-2">
+            <div class="col-6"><label class="form-label small">Connections per server (1–16)</label><input class="form-control" type="number" min="1" max="16" data-key="max-connection-per-server" placeholder="aria2: 1"></div>
+            <div class="col-6"><label class="form-label small">Split (1–64)</label><input class="form-control" type="number" min="1" max="64" data-key="split" placeholder="aria2: 5"></div>
+            <div class="col-6"><label class="form-label small">Min split size</label><input class="form-control" data-key="min-split-size" placeholder="aria2: 20M"></div>
+            <div class="col-6"><label class="form-label small">File allocation</label>
+              <select class="form-select" data-key="file-allocation"><option value="">aria2 default (prealloc)</option><option>none</option><option>falloc</option><option>trunc</option><option>prealloc</option></select></div>
+          </div>
+          <div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="def-continue" data-key="continue"><label class="form-check-label" for="def-continue">Resume partial files (continue)</label></div>
+          <div class="form-text mb-3">Added to every download you start from the panel. Whatever you choose in the Add dialog wins. More connections only help on servers that allow them, some answer with errors or ban you.</div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> Save</button>
+            <button class="btn btn-outline-secondary" type="button" id="use-recommended"><i class="bi bi-stars"></i> Use recommended</button>
+            <button class="btn btn-link ms-auto" type="button" id="clear-defaults">Clear</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'core/js/performance.js' %}?v={{ asset_version }}"></script>{% endblock %}
