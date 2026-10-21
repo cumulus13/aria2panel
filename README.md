@@ -7,7 +7,7 @@ configuration stored in **PostgreSQL**.
 ![Django](https://img.shields.io/badge/django-%23092E20.svg?style=flat&logo=django&logoColor=white) ![PostgreSQL](https://img.shields.io/badge/postgresql-%23316192.svg?style=flat&logo=postgresql&logoColor=white) ![CI Status](https://github.com/cumulus13/aria2panel/actions/workflows/ci.yml/badge.svg)
 
 <p align="center">
-  <img src="https://files.catbox.moe/wtuttw.png" width="20%" alt="Powered by Django">
+  <img src="https://i.ibb.co.com/20xTZWbB/aria2panel-django.png" width="20%" alt="Powered by Django">
 </p>
 
 ## Architecture
@@ -28,23 +28,23 @@ graph TD
     Scheduler --> Aria2
 ```    
 
-[![Architecture](https://files.catbox.moe/5fdngl.jpg)](https://files.catbox.moe/5fdngl.jpg)
+[![Architecture](https://i.ibb.co.com/g0Hz3vv/aria2panel-architecture.jpg)](https://i.ibb.co.com/g0Hz3vv/aria2panel-architecture.jpg)
 
 <p align="center">
-  <a href="https://files.catbox.moe/e4da8v.png" target="_blank">
-    <img src="https://files.catbox.moe/e4da8v.png" width="500" alt="Screenshot 1">
+  <a href="https://i.ibb.co.com/RkF9dG0z/aria2panel-screenshot1.png" target="_blank">
+    <img src="https://i.ibb.co.com/RkF9dG0z/aria2panel-screenshot1.png" width="500" alt="Screenshot 1">
   </a>
-  <a href="https://files.catbox.moe/26f5kk.png" target="_blank">
-    <img src="https://files.catbox.moe/26f5kk.png" width="500" alt="Screenshot 2">
+  <a href="https://i.ibb.co.com/Pzhb4fGM/aria2panel-screenshot2.png" target="_blank">
+    <img src="https://i.ibb.co.com/Pzhb4fGM/aria2panel-screenshot2.png" width="500" alt="Screenshot 2">
   </a>
-  <a href="https://files.catbox.moe/139p3t.png" target="_blank">
-    <img src="https://files.catbox.moe/139p3t.png" width="500" alt="Screenshot 3">
+  <a href="https://i.ibb.co/Pst9GfnQ/aria2panel-screenshot3.png" target="_blank">
+    <img src="https://i.ibb.co/Pst9GfnQ/aria2panel-screenshot3.png" width="500" alt="Screenshot 3">
   </a>
-  <a href="https://files.catbox.moe/1u27a2.png" target="_blank">
-    <img src="https://files.catbox.moe/1u27a2.png" width="500" alt="Screenshot 4">
+  <a href="https://i.ibb.co/YBLHvtBg/aria2panel-screenshot4.png" target="_blank">
+    <img src="https://i.ibb.co/YBLHvtBg/aria2panel-screenshot4.png" width="500" alt="Screenshot 4">
   </a>
-  <a href="https://files.catbox.moe/g73bf9.png" target="_blank">
-    <img src="https://files.catbox.moe/g73bf9.png" width="500" alt="Screenshot 5">
+  <a href="https://i.ibb.co/8L24GyW2/aria2panel-screenshot5.png" target="_blank">
+    <img src="https://i.ibb.co/8L24GyW2/aria2panel-screenshot5.png" width="500" alt="Screenshot 5">
   </a>
 </p>
 
