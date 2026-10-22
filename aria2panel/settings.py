@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "core",
+    "logs"
 ]
 
 MIDDLEWARE = [
@@ -139,6 +140,8 @@ if env_bool("DJANGO_BEHIND_PROXY", False):
     USE_X_FORWARDED_HOST = True
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 
+from logs.settings import LOGGING
+
 # LOGGING = {
 #     "version": 1,
 #     "disable_existing_loggers": False,
@@ -148,61 +151,61 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 #     "loggers": {"django.server": {"level": "WARNING"}},
 # }
 
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'colored_verbose': {
-            '()': 'colorlog.ColoredFormatter',
-            'format': "%(log_color)s%(levelname)-8s%(red)s%(module)-30s%(reset)s %(blue)s%(message)s"
-        },
-        'verbose': {
-            'format': '%(asctime)s [PID:%(process)d] [TID:%(thread)d] [%(filename)s:%(lineno)d] %(levelname)s %(message)s',
-        },
-    },
-    'handlers': {
-        'file': {
-            'level': 'DEBUG',
-            'class': 'logging.FileHandler',
-            'filename': LOG_FILE,
-        },
-        'console': {
-            'level':'INFO',
-            'class':'rich.logging.RichHandler',
-        },
-        'colored_console': {
-            'level': 'DEBUG',
-            'class': 'logging.StreamHandler',
-            'formatter': 'colored_verbose'
-        },
-        'syslog': {
-            #'class': 'logging.handlers.SysLogHandler',
-            'class': 'logs.handler.SysLogTextHandler',
-            'address': (env("SYSLOG_PROXY_HOST", '222.222.222.7'), env("SYSLOG_PROXY_PORT", 514)),
-            'formatter': env('DJANGO_SYSLOG_PROXY_LOG_FORMAT', 'verbose'),
-            "env": env('DJANGO_SYSLOG_PROXY_LOG_ENV', "production"),
-        },
-    },
-    'loggers': {
-        'django': {
-            'handlers': ['console', 'file'],
-            'level': 'WARNING',
-            'propagate': True,
-            },
-        'gunicorn.error': {
-            'handlers': ['console', 'syslog'],
-            'level': 'ERROR',
-            'propagate': True,
-        },
-        'gunicorn.access': {
-            'handlers': ['console', 'syslog'],
-            'level': 'WARNING',
-            'propagate': False,
-        },
-        "root": {
-            "handlers": ["console", 'syslog'], 
-            "level": env("DJANGO_LOG_LEVEL", str(env("LOG_LEVEL", "INFO")).upper())
-        },
-    }
-}
+# LOGGING = {
+#     'version': 1,
+#     'disable_existing_loggers': False,
+#     'formatters': {
+#         'colored_verbose': {
+#             '()': 'colorlog.ColoredFormatter',
+#             'format': "%(log_color)s%(levelname)-8s%(red)s%(module)-30s%(reset)s %(blue)s%(message)s"
+#         },
+#         'verbose': {
+#             'format': '%(asctime)s [PID:%(process)d] [TID:%(thread)d] [%(filename)s:%(lineno)d] %(levelname)s %(message)s',
+#         },
+#     },
+#     'handlers': {
+#         'file': {
+#             'level': 'DEBUG',
+#             'class': 'logging.FileHandler',
+#             'filename': LOG_FILE,
+#         },
+#         'console': {
+#             'level':'INFO',
+#             'class':'rich.logging.RichHandler',
+#         },
+#         'colored_console': {
+#             'level': 'DEBUG',
+#             'class': 'logging.StreamHandler',
+#             'formatter': 'colored_verbose'
+#         },
+#         'syslog': {
+#             #'class': 'logging.handlers.SysLogHandler',
+#             'class': 'logs.handler.SysLogTextHandler',
+#             'address': (env("SYSLOG_PROXY_HOST", '222.222.222.7'), env("SYSLOG_PROXY_PORT", 514)),
+#             'formatter': env('DJANGO_SYSLOG_PROXY_LOG_FORMAT', 'verbose'),
+#             "env": env('DJANGO_SYSLOG_PROXY_LOG_ENV', "production"),
+#         },
+#     },
+#     'loggers': {
+#         'django': {
+#             'handlers': ['console', 'file'],
+#             'level': 'WARNING',
+#             'propagate': True,
+#             },
+#         'gunicorn.error': {
+#             'handlers': ['console', 'syslog'],
+#             'level': 'ERROR',
+#             'propagate': True,
+#         },
+#         'gunicorn.access': {
+#             'handlers': ['console', 'syslog'],
+#             'level': 'WARNING',
+#             'propagate': False,
+#         },
+#         "root": {
+#             "handlers": ["console", 'syslog'], 
+#             "level": env("DJANGO_LOG_LEVEL", str(env("LOG_LEVEL", "INFO")).upper())
+#         },
+#     }
+# }
 
