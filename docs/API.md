@@ -27,7 +27,7 @@ can only `GET` (good for widgets). Errors: `{"error": "…"}` with 400/401/403/4
 | `GET /api/v1/servers/<id>/events/` | **SSE** stream, see below |
 | `GET /api/v1/servers/<id>/events/history/?after=<id>&limit=` | persisted events, for catching up without SSE |
 | `GET /api/v1/servers/<id>/history/?seconds=` | recorded global speed samples |
-| `POST /api/v1/servers/<id>/add/` | multipart: `uris` (one per line), `files`, `options` (JSON), `not_before` |
+| `POST /api/v1/servers/<id>/add/` | multipart: `uris` (one download per line; mirrors on the same line each start with a scheme; spaces inside a link are fine), `files`, `options` (JSON), `not_before` |
 | `POST /api/v1/servers/<id>/action/` | `{"action": pause\|unpause\|forcePause\|remove\|forceRemove\|retry\|pauseAll\|unpauseAll\|purge, "gid"/"gids"}` |
 | `GET /api/v1/servers/<id>/download/<gid>/` | details: files, options |
 | `GET /api/v1/servers/<id>/diagnostics/` | why downloads may be slow: effective limits, where they come from, hints |

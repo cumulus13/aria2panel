@@ -169,3 +169,37 @@ class SpeedHistoryTests(LiveAria2Case):
         SpeedSample.objects.filter(pk=old.pk).update(ts=timezone.now() - timedelta(hours=3))
         call_command("run_scheduler", "--once")
         self.assertFalse(SpeedSample.objects.filter(pk=old.pk).exists())
+
+
+class UnencodedLinkTests(LiveAria2Case):
+    """Links copied from a browser bar or a site often contain spaces, commas, brackets."""
+
+    NAMES = [
+        "(Acoustic, Guitar, Instrumental) Tugores - Imatges De Knopfler (A Mark Knopfler Tribute) - 2008, MP3, 320 kbps.zip",
+        "[FTUApps com] - Text to Speech Studio v2 0 0 Pre-Activated.zip",
+    ]
+
+    def setUp(self):
+        self.clean_aria2()
+        folder = os.path.join(self.www, "get_zip_ngen_free", "30004742")
+        os.makedirs(folder, exist_ok=True)
+        for name in self.NAMES:
+            with open(os.path.join(folder, name), "wb") as f:
+                f.write(b"x" * 50000)
+
+    def test_links_with_spaces_download_with_the_right_file_name(self):
+        base = "http://127.0.0.1:%d/get_zip_ngen_free/30004742/" % self.http_port
+        text = "\n".join(base + n + "?st=abc_DEF-1&e=1792648254" for n in self.NAMES)
+        server = self.make_server(max_downloads=5)
+        result = services.add_downloads(server, uri_lines=services.parse_uri_lines(text))
+        self.assertEqual((result.dispatched, result.failed), (2, 0))
+        client = Aria2Client_for(self)
+
+        def finished():
+            scheduler.tick(server)
+            return all(client.tell_status(q.gid.split(",")[0], ["status"])["status"] == "complete" for q in server.queue.all())
+
+        self.assertTrue(wait_until(finished, timeout=20), [client.tell_status(q.gid, ["status", "errorMessage"]) for q in server.queue.all()])
+        for name in self.NAMES:
+            self.assertTrue(os.path.exists(os.path.join(self.dl, name)), name + " missing")
+        self.assertEqual(sorted(q.name for q in server.queue.all()), sorted(self.NAMES))

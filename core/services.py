@@ -217,14 +217,28 @@ class AddResult:
     errors: list = field(default_factory=list)
 
 
+# a new mirror starts where whitespace is followed by a scheme (http://, ftp://, magnet:, ...)
+_NEW_URI = re.compile(r"\s+(?=(?:[A-Za-z][A-Za-z0-9+.\-]*://|magnet:))")
+
+
 def parse_uri_lines(text):
-    """One download per line, several mirrors for the same file separated by whitespace."""
+    """One download per line. Several mirrors of the same file go on one line, each starting with
+    its scheme. Spaces inside a link (file names like "Foo - Bar, 2008.zip") belong to the link,
+    aria2 percent-encodes them itself, exactly like a browser would."""
     out = []
     for line in (text or "").splitlines():
         line = line.strip()
         if line and not line.startswith("#"):
-            out.append(line.split())
+            mirrors = [m.strip() for m in _NEW_URI.split(line) if m.strip()]
+            if mirrors:
+                out.append(mirrors)
     return out
+
+
+def display_basename(uri):
+    from urllib.parse import unquote
+
+    return _basename(unquote(uri.split("?")[0])) or uri
 
 
 @transaction.atomic
@@ -241,7 +255,7 @@ def add_downloads(server, *, uri_lines=(), torrents=(), metalinks=(), options=No
     options = {**(server.default_options or {}), **clean_options(options)}  # what was chosen when adding wins
     specs = []
     for mirrors in uri_lines:
-        specs.append({"kind": QueueItem.Kind.URI, "uris": mirrors, "name": _basename(mirrors[0].split("?")[0]) or mirrors[0], "options": options, "not_before": not_before})
+        specs.append({"kind": QueueItem.Kind.URI, "uris": mirrors, "name": display_basename(mirrors[0]), "options": options, "not_before": not_before})
     for kind, files in ((QueueItem.Kind.TORRENT, torrents), (QueueItem.Kind.METALINK, metalinks)):
         for filename, data in files:
             specs.append({"kind": kind, "payload": base64.b64encode(data).decode(), "name": filename, "options": options, "not_before": not_before})

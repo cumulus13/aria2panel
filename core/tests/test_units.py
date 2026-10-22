@@ -128,3 +128,28 @@ class DotenvTests(TestCase):
             for k in ("PANEL_T_A", "PANEL_T_B", "PANEL_T_C", "PANEL_T_D"):
                 os.environ.pop(k, None)
             os.unlink(f.name)
+
+
+class UriLineTests(TestCase):
+    SEEDR = [
+        "https://nw21.seedr.cc/get_zip_ngen_free/30004742/(Acoustic, Guitar, Instrumental) Tugores - Imatges De Knopfler (A Mark Knopfler Tribute) - 2008, MP3, 320 kbps.zip?st=ZSScJh_QJSdfryJgakzK1g&e=1792648254",
+        "https://nw28.seedr.cc/get_zip_ngen_free/30004752/(Instrumental Guitar _ Blues _ Rock _ Fusion _ Funk) Rob Wasserman, Craig Erickson, T Lavitz, Jeff Sipe - Cosmic Farm - 2005, MP3 (tracks), 320 kbps.zip?st=WZa4R7zXytwe6-VvS4ss1A&e=1792648296",
+        "https://rd5.seedr.cc/get_zip_ngen_free/30004757/[FTUApps com] - Text to Speech Studio v2 0 0 Pre-Activated.zip?st=XpXCNMAZ-dMB6Ieu2hzodQ&e=1792648321",
+    ]
+
+    def test_links_with_spaces_stay_in_one_piece(self):
+        lines = services.parse_uri_lines("\n".join(self.SEEDR))
+        self.assertEqual(lines, [[u] for u in self.SEEDR])
+
+    def test_mirrors_are_split_only_before_a_scheme(self):
+        text = "  https://a.example/my file.iso   https://b.example/my file.iso\tftp://c.example/x.iso  \n\n# comment\nmagnet:?xt=urn:btih:abc&dn=Some Name\r\n"
+        self.assertEqual(services.parse_uri_lines(text), [
+            ["https://a.example/my file.iso", "https://b.example/my file.iso", "ftp://c.example/x.iso"],
+            ["magnet:?xt=urn:btih:abc&dn=Some Name"],
+        ])
+        self.assertEqual(services.parse_uri_lines(""), [])
+        self.assertEqual(services.parse_uri_lines("   \n# only a comment"), [])
+
+    def test_name_shown_in_the_queue_is_decoded(self):
+        self.assertEqual(services.display_basename(self.SEEDR[2]), "[FTUApps com] - Text to Speech Studio v2 0 0 Pre-Activated.zip")
+        self.assertEqual(services.display_basename("http://h/a%20b%2Cc.zip?x=1"), "a b,c.zip")
