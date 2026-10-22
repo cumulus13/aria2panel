@@ -86,7 +86,7 @@ TEMPLATES = [
     },
 ]
 
-_db = dj_database_url.config(env="DATABASE_URL", conn_max_age=60, conn_health_checks=True)
+_db = dj_database_url.config(env="DATABASE_URL", conn_max_age=0, conn_health_checks=True) # 0 for pgboucer and 60 for postgresql
 if not _db:
     raise ImproperlyConfigured(
         "DATABASE_URL is required, e.g. postgres://user:password@host:5432/dbname "
