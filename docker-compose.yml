@@ -31,3 +31,44 @@ services:
     ports:
       - "6800:6800"
     restart: unless-stopped
+  pg:
+    image: postgres:15-alpine
+    container_name: pg
+    hostname: pg
+    shm_size: 256m
+    command: ["postgres", "-c", "log_min_messages=warning", "-c", "max_connections=200"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: hackme
+      POSTGRES_DB: postgres
+      TZ: Asia/Jakarta
+      LANG: en_US.UTF-8
+    ports:
+    - 5432:5432
+    volumes:
+    - pg_data2:/var/lib/postgresql/data
+    healthcheck:
+      test:
+      - CMD
+      - pg_isready
+      - -U
+      - postgres
+      interval: 10s
+      retries: 5
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: pgbouncer
+    hostname: pgbouncer
+    environment:
+      - DATABASE_URL=postgres://postgres:hackme@pg:5432/postgres
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=1000
+      - DEFAULT_POOL_SIZE=20
+    ports:
+      - "6432:6432"
+    volumes:
+      - /containers/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
+      - /containers/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt
+    tty: true
+    depends_on:
+      - pg
