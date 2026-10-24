@@ -140,7 +140,13 @@ if env_bool("DJANGO_BEHIND_PROXY", False):
     USE_X_FORWARDED_HOST = True
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 
-from logs.settings import LOGGING
+from logs.settings import LOGGING as logging
+
+LOG_DIR = os.path.join(BASE_DIR, 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, env('DJANGO_LOG_FILE_PATH', 'debug.log'))
+
+LOGGING = logging(BASE_DIR, LOG_FILE)
 
 # LOGGING = {
 #     "version": 1,
